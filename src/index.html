@@ -3,11 +3,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shootout</title>
+    <title>Magnus</title>
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-    <canvas class="webgl"></canvas>
+    <div class="bento-grid">
+        <div class="bento-row" id="top-row">
+            <div class="bento-panel" id="panel-shooter">
+                <button class="panel-fs-btn" title="Toggle fullscreen">
+                    <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                    <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
+                </button>
+                <canvas class="webgl"></canvas>
+            </div>
+            <div class="resize-handle resize-v"></div>
+            <div class="bento-panel" id="panel-customizer">
+                <button class="panel-fs-btn" title="Toggle fullscreen">
+                    <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                    <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
+                </button>
+                <div class="panel-content">
+                    <span class="panel-label">Ball Customizer</span>
+                </div>
+            </div>
+        </div>
+        <div class="resize-handle resize-h"></div>
+        <div class="bento-row" id="bottom-row">
+            <div class="bento-panel" id="panel-3">
+                <button class="panel-fs-btn" title="Toggle fullscreen">
+                    <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                    <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
+                </button>
+            </div>
+            <div class="resize-handle resize-v"></div>
+            <div class="bento-panel" id="panel-4">
+                <button class="panel-fs-btn" title="Toggle fullscreen">
+                    <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                    <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
+                </button>
+                <canvas class="side-view"></canvas>
+                <div class="stats-overlay" id="ball-stats">
+                    <div class="stat">
+                        <span class="stat-label">Speed</span>
+                        <span class="stat-value" id="stat-speed">--</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Spin</span>
+                        <span class="stat-value" id="stat-spin">--</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Height</span>
+                        <span class="stat-value" id="stat-height">--</span>
+                    </div>
+                </div>
+            </div>
+            <div class="resize-handle resize-v"></div>
+            <div class="bento-panel" id="panel-5">
+                <button class="panel-fs-btn" title="Toggle fullscreen">
+                    <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                    <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
+                </button>
+                <div class="panel-content">
+                    <span class="panel-label">Panel 5</span>
+                </div>
+            </div>
+        </div>
+    </div>
     <script type="module" src="./script.js"></script>
 </body>
 </html>

@@ -1,25 +1,213 @@
-*
-{
+* {
     margin: 0;
     padding: 0;
+    box-sizing: border-box;
 }
 
 html,
-body
-{
+body {
     overflow: hidden;
+    width: 100%;
+    height: 100%;
+    background: #111;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #888;
 }
 
-.webgl
-{
-    position: fixed;
-    top: 0;
-    left: 0;
+.bento-grid {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    padding: 8px;
+}
+
+.bento-row {
+    display: flex;
+    min-height: 0;
+}
+
+#top-row {
+    flex: 60 0 0px;
+}
+
+#bottom-row {
+    flex: 40 0 0px;
+}
+
+.bento-panel {
+    position: relative;
+    background: #0a0a0a;
+    border-radius: 12px;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+}
+
+#panel-shooter {
+    flex: 65 0 0px;
+}
+
+#panel-customizer {
+    flex: 35 0 0px;
+}
+
+#panel-3,
+#panel-4,
+#panel-5 {
+    flex: 1 0 0px;
+}
+
+#panel-3 {
+    overflow-y: auto;
+}
+
+#panel-3 > .lil-gui {
+    width: 100%;
+    --background-color: #0a0a0a;
+}
+
+/* Resize handles */
+.resize-handle {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 5;
+}
+
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    border-radius: 2px;
+    background: transparent;
+    transition: background 0.2s;
+}
+
+.resize-handle:hover::after,
+.resize-handle.active::after {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.resize-v {
+    width: 8px;
+    cursor: col-resize;
+}
+
+.resize-v::after {
+    top: 20%;
+    left: 3px;
+    width: 2px;
+    height: 60%;
+}
+
+.resize-h {
+    height: 8px;
+    cursor: row-resize;
+}
+
+.resize-h::after {
+    left: 20%;
+    top: 3px;
+    width: 60%;
+    height: 2px;
+}
+
+/* Canvas */
+.webgl {
+    display: block;
+    width: 100%;
+    height: 100%;
     outline: none;
-    cursor: grab;
+    cursor: default;
 }
 
-.webgl:active
-{
-    cursor: grabbing;
+/* Panel fullscreen button */
+.panel-fs-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 6px;
+    color: #666;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s, color 0.2s;
+}
+
+.panel-fs-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.panel-fs-btn .icon-collapse {
+    display: none;
+}
+
+.bento-panel.fullscreen .panel-fs-btn .icon-expand {
+    display: none;
+}
+
+.bento-panel.fullscreen .panel-fs-btn .icon-collapse {
+    display: block;
+}
+
+.bento-panel:hover .panel-fs-btn {
+    opacity: 1;
+}
+
+.panel-fs-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ccc;
+}
+
+/* Panel fullscreen state */
+.bento-panel.fullscreen {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 999 !important;
+    border-radius: 0 !important;
+    flex: none !important;
+}
+
+.bento-panel.fullscreen .panel-fs-btn {
+    opacity: 1;
+    top: 12px;
+    right: 12px;
+}
+
+/* Panel content placeholder */
+.panel-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 20px;
+    user-select: none;
+}
+
+.panel-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    letter-spacing: 0.02em;
+}
+
+/* Prevent selection during resize */
+.resizing {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.resizing iframe,
+.resizing canvas {
+    pointer-events: none;
 }
