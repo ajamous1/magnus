@@ -50,6 +50,8 @@ body {
 
 #panel-customizer {
     flex: 35 0 0px;
+    display: flex;
+    flex-direction: column;
 }
 
 #panel-3,
@@ -118,6 +120,97 @@ body {
     height: 100%;
     outline: none;
     cursor: default;
+}
+
+/* Customizer preview */
+.customizer-viewport {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+}
+
+.customizer-preview {
+    display: block;
+    width: 100%;
+    height: 100%;
+    outline: none;
+    cursor: grab;
+}
+
+.customizer-preview:active {
+    cursor: grabbing;
+}
+
+/* Customizer controls */
+.customizer-controls {
+    flex-shrink: 0;
+    padding: 12px 14px;
+    border-top: 1px solid #1a1a1a;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.control-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #555;
+}
+
+.design-buttons {
+    display: flex;
+    gap: 4px;
+}
+
+.design-btn {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    color: #666;
+    font-size: 11px;
+    font-family: inherit;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.design-btn:hover {
+    border-color: #444;
+    color: #bbb;
+}
+
+.design-btn.active {
+    background: #1f1f1f;
+    border-color: #555;
+    color: #fff;
+}
+
+.color-picker {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.color-picker::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+
+.color-picker::-webkit-color-swatch {
+    border: 1px solid #333;
+    border-radius: 4px;
 }
 
 /* Panel fullscreen button */
