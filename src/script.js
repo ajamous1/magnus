@@ -339,33 +339,25 @@ const ballConfig = {
 }
 
 const BALL_DESIGNS = {
-    classic: {
-        drag: 1.0,
-        randomnessBonus: 0
-    },
-    jabulani: {
-        drag: 0.85,
-        randomnessBonus: 0.3,
-        stitchGeo: (r) => new THREE.OctahedronGeometry(r, 2),
-        edgeThreshold: 8
-    },
-    brazuca: {
-        drag: 1.1,
-        randomnessBonus: -0.2,
-        stitchGeo: (r) => {
-            const box = new THREE.BoxGeometry(1, 1, 1, 8, 8, 8)
-            const pos = box.attributes.position
-            for (let i = 0; i < pos.count; i++) {
-                const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
-                const len = Math.sqrt(x * x + y * y + z * z)
-                pos.setXYZ(i, x / len * r, y / len * r, z / len * r)
-            }
-            pos.needsUpdate = true
-            box.computeVertexNormals()
-            return box
-        },
-        edgeThreshold: 5
+    classic: { drag: 1.0, randomnessBonus: 0 },
+    jabulani: { drag: 0.85, randomnessBonus: 0.3 },
+    brazuca: { drag: 1.1, randomnessBonus: -0.2 },
+    trionda: { drag: 0.9, randomnessBonus: 0.1 }
+}
+
+function wavyGreatCircle(axisIdx, r, amplitude, freq, segments) {
+    const points = []
+    for (let i = 0; i <= segments; i++) {
+        const t = (i / segments) * Math.PI * 2
+        const wobble = amplitude * Math.sin(freq * t)
+        let x, y, z
+        if (axisIdx === 0) { x = Math.cos(t); y = Math.sin(t); z = wobble }
+        else if (axisIdx === 1) { x = wobble; y = Math.cos(t); z = Math.sin(t) }
+        else { x = Math.sin(t); y = wobble; z = Math.cos(t) }
+        const len = Math.sqrt(x * x + y * y + z * z)
+        points.push(new THREE.Vector3(x / len * r, y / len * r, z / len * r))
     }
+    return points
 }
 
 function buildBallMesh(config, radius) {
@@ -448,11 +440,182 @@ function buildBallMesh(config, radius) {
             geo.computeVertexNormals()
             group.add(new THREE.Mesh(geo, pentMat))
         }
-    } else {
-        const edgesMat = new THREE.LineBasicMaterial({ color: config.secondaryColor })
-        const stitchBase = design.stitchGeo(radius * 1.002)
-        const edgesGeo = new THREE.EdgesGeometry(stitchBase, design.edgeThreshold)
-        group.add(new THREE.LineSegments(edgesGeo, edgesMat))
+    } else if (config.design === 'jabulani') {
+        const seamR = radius * 1.003
+        const tubeR = radius * 0.016
+        const seamMat = new THREE.MeshLambertMaterial({ color: config.secondaryColor })
+
+        const s = 1 / Math.sqrt(3)
+        const tv = [[s,s,s],[s,-s,-s],[-s,s,-s],[-s,-s,s]]
+
+        const raw = []
+        for (let i = 0; i < 4; i++) {
+            for (let j = i + 1; j < 4; j++) {
+                const a = tv[i], b = tv[j]
+                raw.push(
+                    [(2*a[0]+b[0])/3, (2*a[1]+b[1])/3, (2*a[2]+b[2])/3],
+                    [(a[0]+2*b[0])/3, (a[1]+2*b[1])/3, (a[2]+2*b[2])/3]
+                )
+            }
+        }
+        const verts = raw.map(v => {
+            const len = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2])
+            return [v[0]/len, v[1]/len, v[2]/len]
+        })
+
+        const triGroups = [
+            { ci: 0, edges: [[0,2],[2,4],[4,0]] },
+            { ci: 1, edges: [[1,6],[6,8],[8,1]] },
+            { ci: 2, edges: [[3,7],[7,10],[10,3]] },
+            { ci: 3, edges: [[5,9],[9,11],[11,5]] }
+        ]
+        const midEdges = [
+            [0,1],[2,3],[4,5],[6,7],[8,9],[10,11]
+        ]
+
+        const seg = 48
+        const triBow = 0.18
+        const midBow = 0.15
+
+        function makeSeam(ai, bi, bow) {
+            const a = new THREE.Vector3(verts[ai][0], verts[ai][1], verts[ai][2])
+            const b = new THREE.Vector3(verts[bi][0], verts[bi][1], verts[bi][2])
+            const omega = Math.acos(Math.min(1, a.dot(b)))
+            const sinO = Math.sin(omega)
+            const edgeDir = b.clone().sub(a).normalize()
+            const points = []
+            for (let i = 0; i <= seg; i++) {
+                const t = i / seg
+                const p = a.clone().multiplyScalar(Math.sin((1 - t) * omega) / sinO)
+                    .add(b.clone().multiplyScalar(Math.sin(t * omega) / sinO))
+                if (bow !== 0) {
+                    const radial = p.clone().normalize()
+                    const perp = new THREE.Vector3().crossVectors(radial, edgeDir).normalize()
+                    p.add(perp.multiplyScalar(bow * Math.sin(Math.PI * t)))
+                }
+                p.normalize().multiplyScalar(seamR)
+                points.push(p)
+            }
+            const curve = new THREE.CatmullRomCurve3(points, false)
+            group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 48, tubeR, 8, false), seamMat))
+        }
+
+        for (const grp of triGroups) {
+            const tc = new THREE.Vector3(tv[grp.ci][0], tv[grp.ci][1], tv[grp.ci][2])
+            for (const [ai, bi] of grp.edges) {
+                const a = new THREE.Vector3(verts[ai][0], verts[ai][1], verts[ai][2])
+                const b = new THREE.Vector3(verts[bi][0], verts[bi][1], verts[bi][2])
+                const mid = a.clone().add(b).multiplyScalar(0.5).normalize()
+                const edgeDir = b.clone().sub(a).normalize()
+                const perp = new THREE.Vector3().crossVectors(mid, edgeDir).normalize()
+                const sign = perp.dot(tc) > 0 ? -1 : 1
+                makeSeam(ai, bi, sign * triBow)
+            }
+        }
+
+        for (const [ai, bi] of midEdges) {
+            makeSeam(ai, bi, midBow)
+        }
+
+        const jointGeo = new THREE.SphereGeometry(tubeR * 1.3, 8, 8)
+        for (const v of verts) {
+            const joint = new THREE.Mesh(jointGeo, seamMat)
+            joint.position.set(v[0] * seamR, v[1] * seamR, v[2] * seamR)
+            group.add(joint)
+        }
+    } else if (config.design === 'trionda') {
+        const seamR = radius * 1.003
+        const tubeR = radius * 0.018
+        const seamMat = new THREE.MeshLambertMaterial({ color: config.secondaryColor })
+
+        const cs = 1 / Math.sqrt(3)
+        const tv = [
+            [cs, cs, cs], [cs, -cs, -cs], [-cs, cs, -cs], [-cs, -cs, cs]
+        ]
+        const te = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]]
+
+        const amp = 0.55
+        const seg = 64
+        for (const [ai, bi] of te) {
+            const a = new THREE.Vector3(tv[ai][0], tv[ai][1], tv[ai][2])
+            const b = new THREE.Vector3(tv[bi][0], tv[bi][1], tv[bi][2])
+            const omega = Math.acos(Math.min(1, a.dot(b)))
+            const sinO = Math.sin(omega)
+            const edgeDir = b.clone().sub(a).normalize()
+
+            const points = []
+            for (let i = 0; i <= seg; i++) {
+                const t = i / seg
+                const p = a.clone().multiplyScalar(Math.sin((1 - t) * omega) / sinO)
+                    .add(b.clone().multiplyScalar(Math.sin(t * omega) / sinO))
+                const radial = p.clone().normalize()
+                const perp = new THREE.Vector3().crossVectors(radial, edgeDir).normalize()
+                const taper = Math.sin(Math.PI * t)
+                const disp = Math.sin(2 * Math.PI * t)
+                p.add(perp.multiplyScalar(amp * disp * taper))
+                p.normalize().multiplyScalar(seamR)
+                points.push(p)
+            }
+
+            const curve = new THREE.CatmullRomCurve3(points, false)
+            group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 64, tubeR, 8, false), seamMat))
+        }
+
+        const jointGeo = new THREE.SphereGeometry(tubeR * 1.5, 10, 10)
+        for (const v of tv) {
+            const joint = new THREE.Mesh(jointGeo, seamMat)
+            joint.position.set(v[0] * seamR, v[1] * seamR, v[2] * seamR)
+            group.add(joint)
+        }
+    } else if (config.design === 'brazuca') {
+        const seamR = radius * 1.003
+        const tubeR = radius * 0.014
+        const seamMat = new THREE.MeshLambertMaterial({ color: config.secondaryColor })
+
+        const cs = 1 / Math.sqrt(3)
+        const cv = [
+            [cs,cs,cs],[cs,cs,-cs],[cs,-cs,cs],[cs,-cs,-cs],
+            [-cs,cs,cs],[-cs,cs,-cs],[-cs,-cs,cs],[-cs,-cs,-cs]
+        ]
+        const ce = [
+            [0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7]
+        ]
+
+        const amp = 0.50
+        const seg = 64
+
+        for (const [ai, bi] of ce) {
+            const a = new THREE.Vector3(cv[ai][0], cv[ai][1], cv[ai][2])
+            const b = new THREE.Vector3(cv[bi][0], cv[bi][1], cv[bi][2])
+            const omega = Math.acos(Math.min(1, a.dot(b)))
+            const sinO = Math.sin(omega)
+            const edgeDir = b.clone().sub(a).normalize()
+
+            const points = []
+            for (let i = 0; i <= seg; i++) {
+                const t = i / seg
+                const p = a.clone().multiplyScalar(Math.sin((1 - t) * omega) / sinO)
+                    .add(b.clone().multiplyScalar(Math.sin(t * omega) / sinO))
+                const radial = p.clone().normalize()
+                const perp = new THREE.Vector3().crossVectors(radial, edgeDir).normalize()
+                const taper = Math.sin(Math.PI * t)
+                const raw = Math.sin(2 * Math.PI * t)
+                const sharp = Math.sign(raw) * Math.pow(Math.abs(raw), 0.45)
+                p.add(perp.multiplyScalar(amp * sharp * taper))
+                p.normalize().multiplyScalar(seamR)
+                points.push(p)
+            }
+            const curve = new THREE.CatmullRomCurve3(points, false)
+            group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 64, tubeR, 8, false), seamMat))
+        }
+
+        const jointGeo = new THREE.SphereGeometry(tubeR * 1.2, 8, 8)
+        for (const v of cv) {
+            const joint = new THREE.Mesh(jointGeo, seamMat)
+            joint.position.set(v[0] * seamR, v[1] * seamR, v[2] * seamR)
+            group.add(joint)
+        }
+
     }
 
     return group
@@ -548,6 +711,43 @@ custControls.autoRotateSpeed = 2.0
 custControls.minDistance = 0.6
 custControls.maxDistance = 3.0
 
+// Flat-view 2D rotation: drag spins the layout group around the Z axis
+// (the camera stays fixed on the Z axis; only the net rotates in-plane).
+{
+    let flatDragging = false
+    let flatLastX = 0, flatLastY = 0
+    custCanvas.addEventListener('mousedown', e => {
+        if (custViewMode !== 'flat') return
+        flatDragging = true
+        flatLastX = e.clientX
+        flatLastY = e.clientY
+        e.stopPropagation()
+    })
+    window.addEventListener('mousemove', e => {
+        if (!flatDragging || custViewMode !== 'flat' || !previewBall) return
+        const dx = e.clientX - flatLastX
+        const dy = e.clientY - flatLastY
+        previewBall.rotation.z += dx * 0.01
+        flatLastX = e.clientX
+        flatLastY = e.clientY
+    })
+    window.addEventListener('mouseup', () => { flatDragging = false })
+    custCanvas.addEventListener('touchstart', e => {
+        if (custViewMode !== 'flat' || e.touches.length !== 1) return
+        flatDragging = true
+        flatLastX = e.touches[0].clientX
+        flatLastY = e.touches[0].clientY
+    }, { passive: true })
+    window.addEventListener('touchmove', e => {
+        if (!flatDragging || custViewMode !== 'flat' || !previewBall || e.touches.length !== 1) return
+        const dx = e.touches[0].clientX - flatLastX
+        previewBall.rotation.z += dx * 0.01
+        flatLastX = e.touches[0].clientX
+        flatLastY = e.touches[0].clientY
+    }, { passive: true })
+    window.addEventListener('touchend', () => { flatDragging = false })
+}
+
 const custResizeObserver = new ResizeObserver(() => {
     const w = custViewport.clientWidth
     const h = custViewport.clientHeight
@@ -559,6 +759,331 @@ const custResizeObserver = new ResizeObserver(() => {
 })
 custResizeObserver.observe(custViewport)
 
+let custViewMode = 'ball'
+
+function buildFlatLayout(config) {
+    const g = new THREE.Group()
+    const fillMat = new THREE.MeshBasicMaterial({ color: config.primaryColor, side: THREE.DoubleSide })
+    const lineMat = new THREE.LineBasicMaterial({ color: config.secondaryColor })
+
+    // Shared: project panel corner vertices into its local tangent plane
+    function flattenLocal(vIdxs, v3d, scale, nc) {
+        if (!nc) {
+            nc = new THREE.Vector3()
+            vIdxs.forEach(i => nc.add(v3d[i]))
+            nc.normalize()
+        }
+        const ref = Math.abs(nc.y) < 0.9 ? new THREE.Vector3(0,1,0) : new THREE.Vector3(1,0,0)
+        const ux = new THREE.Vector3().crossVectors(ref, nc).normalize()
+        const uy = new THREE.Vector3().crossVectors(nc, ux).normalize()
+        return vIdxs.map(i => ({ vIdx: i, x: v3d[i].dot(ux)*scale, y: v3d[i].dot(uy)*scale }))
+    }
+
+    // Shared: rigid 2D unfold — attach childPts to parentPts along shared edge va-vb
+    function unfold(parentPts, childPts, va, vb) {
+        const pA = parentPts.find(p => p.vIdx === va), pB = parentPts.find(p => p.vIdx === vb)
+        const cA = childPts.find(p => p.vIdx === va), cB = childPts.find(p => p.vIdx === vb)
+        const angle = Math.atan2(pB.y - pA.y, pB.x - pA.x) - Math.atan2(cB.y - cA.y, cB.x - cA.x)
+        const cos = Math.cos(angle), sin = Math.sin(angle)
+        let pts = childPts.map(p => ({ vIdx: p.vIdx, x: cos*p.x - sin*p.y, y: sin*p.x + cos*p.y }))
+        const rotA = pts.find(p => p.vIdx === va)
+        const tx = pA.x - rotA.x, ty = pA.y - rotA.y
+        pts = pts.map(p => ({ vIdx: p.vIdx, x: p.x + tx, y: p.y + ty }))
+        const dx = pB.x - pA.x, dy = pB.y - pA.y, el = Math.sqrt(dx*dx + dy*dy)
+        const nx = -dy/el, ny = dx/el
+        const pCx = parentPts.reduce((s,p) => s+p.x, 0)/parentPts.length
+        const pCy = parentPts.reduce((s,p) => s+p.y, 0)/parentPts.length
+        const cCx = pts.reduce((s,p) => s+p.x, 0)/pts.length
+        const cCy = pts.reduce((s,p) => s+p.y, 0)/pts.length
+        if (((pCx-pA.x)*nx + (pCy-pA.y)*ny) * ((cCx-pA.x)*nx + (cCy-pA.y)*ny) > 0) {
+            pts = pts.map(p => {
+                const ddx = p.x-pA.x, ddy = p.y-pA.y, d2 = 2*(ddx*nx + ddy*ny)
+                return { vIdx: p.vIdx, x: p.x - d2*nx, y: p.y - d2*ny }
+            })
+        }
+        return pts
+    }
+
+    // Shared: draw a filled panel with curved/S-curved edges
+    // edgeTypeFn(vIdxA, vIdxB, i) => 'bow' | 'mid' | 'scurve'
+    function drawPanel(pts, vIdxList, edgeTypeFn) {
+        const n = pts.length
+        const cx = pts.reduce((s,p) => s+p.x, 0)/n
+        const cy = pts.reduce((s,p) => s+p.y, 0)/n
+        const shape = new THREE.Shape()
+        shape.moveTo(pts[0].x, pts[0].y)
+        for (let i = 0; i < n; i++) {
+            const a = pts[i], b = pts[(i+1)%n]
+            const type = edgeTypeFn ? edgeTypeFn(vIdxList[i], vIdxList[(i+1)%n], i) : 'bow'
+            const ex = b.x-a.x, ey = b.y-a.y, el = Math.sqrt(ex*ex+ey*ey)
+            const px = -ey/el, py = ex/el
+            const mx = (a.x+b.x)/2, my = (a.y+b.y)/2
+            const dot = px*(cx-mx) + py*(cy-my)
+            if (type === 'scurve') {
+                const amp = el * 0.38
+                shape.bezierCurveTo(
+                    a.x + ex*0.25 + px*amp, a.y + ey*0.25 + py*amp,
+                    a.x + ex*0.75 - px*amp, a.y + ey*0.75 - py*amp,
+                    b.x, b.y
+                )
+            } else if (type === 'mid') {
+                const bow = (dot > 0 ? 1 : -1) * el * 0.28
+                shape.quadraticCurveTo(mx + px*bow, my + py*bow, b.x, b.y)
+            } else {
+                const bow = (dot > 0 ? -1 : 1) * el * 0.28
+                shape.quadraticCurveTo(mx + px*bow, my + py*bow, b.x, b.y)
+            }
+        }
+        g.add(new THREE.Mesh(new THREE.ShapeGeometry(shape), fillMat.clone()))
+        const lp = shape.getPoints(48).map(p => new THREE.Vector3(p.x, p.y, 0.01))
+        lp.push(lp[0])
+        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lp), lineMat))
+    }
+
+    // ═══════════════ JABULANI ═══════════════
+    if (config.design === 'jabulani') {
+        const fs = 1 / Math.sqrt(3)
+        const tv = [[fs,fs,fs],[fs,-fs,-fs],[-fs,fs,-fs],[-fs,-fs,fs]]
+        const raw = []
+        for (let i = 0; i < 4; i++) {
+            for (let j = i + 1; j < 4; j++) {
+                const [a, b] = [tv[i], tv[j]]
+                raw.push(
+                    [(2*a[0]+b[0])/3,(2*a[1]+b[1])/3,(2*a[2]+b[2])/3],
+                    [(a[0]+2*b[0])/3,(a[1]+2*b[1])/3,(a[2]+2*b[2])/3]
+                )
+            }
+        }
+        const v3d = raw.map(v => {
+            const l = Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2])
+            return new THREE.Vector3(v[0]/l, v[1]/l, v[2]/l)
+        })
+        const midEdgePairs = [[0,1],[2,3],[4,5],[6,7],[8,9],[10,11]]
+        function isMidEdge(a, b) {
+            return midEdgePairs.some(([x,y]) => (a===x&&b===y)||(a===y&&b===x))
+        }
+        const panelDefs = [
+            { id: 'T0', vIdxs: [0,2,4],         isTri: true  },
+            { id: 'T1', vIdxs: [1,6,8],         isTri: true  },
+            { id: 'T2', vIdxs: [3,7,10],        isTri: true  },
+            { id: 'T3', vIdxs: [5,9,11],        isTri: true  },
+            { id: 'H0', vIdxs: [6,8,9,11,10,7], isTri: false },
+            { id: 'H1', vIdxs: [2,4,5,11,10,3], isTri: false },
+            { id: 'H2', vIdxs: [4,0,1,8,9,5],   isTri: false },
+            { id: 'H3', vIdxs: [0,2,3,7,6,1],   isTri: false },
+        ]
+        const scale = 1.5
+        const localPts = {}
+        panelDefs.forEach(p => { localPts[p.id] = flattenLocal(p.vIdxs, v3d, scale) })
+        const netPts = {}
+        netPts['T0'] = localPts['T0']
+        netPts['H3'] = unfold(netPts['T0'], localPts['H3'], 0, 2)
+        netPts['H1'] = unfold(netPts['T0'], localPts['H1'], 2, 4)
+        netPts['H2'] = unfold(netPts['T0'], localPts['H2'], 4, 0)
+        netPts['T2'] = unfold(netPts['H3'], localPts['T2'], 3, 7)
+        netPts['T1'] = unfold(netPts['H3'], localPts['T1'], 6, 1)
+        netPts['T3'] = unfold(netPts['H1'], localPts['T3'], 5, 11)
+        netPts['H0'] = unfold(netPts['T1'], localPts['H0'], 6, 8)
+        panelDefs.forEach(panel => {
+            drawPanel(netPts[panel.id], panel.vIdxs, (va, vb) =>
+                (!panel.isTri && isMidEdge(va, vb)) ? 'mid' : 'bow'
+            )
+        })
+
+    // ═══════════════ TRIONDA ═══════════════
+    } else if (config.design === 'trionda') {
+        // 4 panels: each bounded by 3 S-curves on tetrahedral edges
+        // Panel k = face opposite tv[k], vertices = the other 3 tv indices
+        const cs = 1 / Math.sqrt(3)
+        const tv = [[cs,cs,cs],[cs,-cs,-cs],[-cs,cs,-cs],[-cs,-cs,cs]]
+        const v3d = tv.map(v => new THREE.Vector3(v[0], v[1], v[2]))
+        const scale = 1.5
+        const panelDefs = [
+            { id: 'P0', vIdxs: [1,2,3] },
+            { id: 'P1', vIdxs: [0,2,3] },
+            { id: 'P2', vIdxs: [0,1,3] },
+            { id: 'P3', vIdxs: [0,1,2] },
+        ]
+        const localPts = {}
+        panelDefs.forEach((p, k) => {
+            const nc = new THREE.Vector3(-tv[k][0], -tv[k][1], -tv[k][2]).normalize()
+            localPts[p.id] = flattenLocal(p.vIdxs, v3d, scale, nc)
+        })
+        // Tetrahedron net: P3 at root, P0/P1/P2 unfolded from P3's edges
+        const netPts = {}
+        netPts['P3'] = localPts['P3']
+        netPts['P0'] = unfold(netPts['P3'], localPts['P0'], 1, 2)
+        netPts['P1'] = unfold(netPts['P3'], localPts['P1'], 0, 2)
+        netPts['P2'] = unfold(netPts['P3'], localPts['P2'], 0, 1)
+        panelDefs.forEach(panel => {
+            drawPanel(netPts[panel.id], panel.vIdxs, () => 'scurve')
+        })
+
+    // ═══════════════ BRAZUCA ═══════════════
+    } else if (config.design === 'brazuca') {
+        // 6 cube-face panels, each bounded by 4 S-curves on cube edges
+        // Net layout (cross):  F2 / F1 F4 F0 F5 / F3
+        const cs = 1 / Math.sqrt(3)
+        const cv = [
+            [cs,cs,cs],[cs,cs,-cs],[cs,-cs,cs],[cs,-cs,-cs],
+            [-cs,cs,cs],[-cs,cs,-cs],[-cs,-cs,cs],[-cs,-cs,-cs]
+        ]
+        const v3d = cv.map(v => new THREE.Vector3(v[0], v[1], v[2]))
+        const scale = 1.2
+        const faceDefs = [
+            { id: 'F0', vIdxs: [0,1,3,2], nc: new THREE.Vector3(1,0,0)  },
+            { id: 'F1', vIdxs: [4,6,7,5], nc: new THREE.Vector3(-1,0,0) },
+            { id: 'F2', vIdxs: [0,4,5,1], nc: new THREE.Vector3(0,1,0)  },
+            { id: 'F3', vIdxs: [2,3,7,6], nc: new THREE.Vector3(0,-1,0) },
+            { id: 'F4', vIdxs: [0,2,6,4], nc: new THREE.Vector3(0,0,1)  },
+            { id: 'F5', vIdxs: [1,5,7,3], nc: new THREE.Vector3(0,0,-1) },
+        ]
+        const localPts = {}
+        faceDefs.forEach(f => { localPts[f.id] = flattenLocal(f.vIdxs, v3d, scale, f.nc) })
+        // Cross net from F4 (+Z) center
+        const netPts = {}
+        netPts['F4'] = localPts['F4']
+        netPts['F0'] = unfold(netPts['F4'], localPts['F0'], 0, 2)  // F4 right edge [0-2]
+        netPts['F3'] = unfold(netPts['F4'], localPts['F3'], 2, 6)  // F4 bottom edge [2-6]
+        netPts['F1'] = unfold(netPts['F4'], localPts['F1'], 6, 4)  // F4 left edge [6-4]
+        netPts['F2'] = unfold(netPts['F4'], localPts['F2'], 4, 0)  // F4 top edge [4-0]
+        netPts['F5'] = unfold(netPts['F0'], localPts['F5'], 1, 3)  // F0 right edge [1-3]
+        faceDefs.forEach(face => {
+            drawPanel(netPts[face.id], face.vIdxs, () => 'scurve')
+        })
+
+    // ═══════════════ CLASSIC ═══════════════
+    } else if (config.design === 'classic') {
+        const { verts, edges, pentagons } = TRUNC_ICO
+        const v3d = verts.map(v => new THREE.Vector3(v[0], v[1], v[2]))
+        const scale = 1.6
+
+        // Build adjacency
+        const adj = new Map()
+        edges.forEach(([a, b]) => {
+            if (!adj.has(a)) adj.set(a, [])
+            if (!adj.has(b)) adj.set(b, [])
+            adj.get(a).push(b)
+            adj.get(b).push(a)
+        })
+
+        // Sort each vertex's neighbors CCW when viewed from outside the sphere.
+        // This defines the rotation system that encodes all faces of the polyhedron.
+        const sortedNb = verts.map((_, vi) => {
+            const pos = v3d[vi]
+            const normal = pos.clone().normalize()
+            const nb = adj.get(vi)
+            const first = v3d[nb[0]].clone().sub(pos)
+            const tang = first.clone()
+                .sub(normal.clone().multiplyScalar(first.dot(normal)))
+                .normalize()
+            const bitan = new THREE.Vector3().crossVectors(tang, normal)
+            return [...nb].sort((a, b) => {
+                const pa = v3d[a].clone().sub(pos)
+                const pb = v3d[b].clone().sub(pos)
+                return Math.atan2(pa.dot(bitan), pa.dot(tang))
+                     - Math.atan2(pb.dot(bitan), pb.dot(tang))
+            })
+        })
+
+        // For directed edge a→b, the next directed edge in the CCW face traversal
+        // is b→prev(a) in the CCW neighbor list of b.
+        function nextVert(a, b) {
+            const nb = sortedNb[b]
+            const idx = nb.indexOf(a)
+            return nb[(idx - 1 + nb.length) % nb.length]
+        }
+
+        // Trace all faces using the rotation system; collect hexagonal faces (length 6).
+        const visitedEdge = new Set()
+        const allHexFaces = []
+        edges.forEach(([ea, eb]) => {
+            for (const [sa, sb] of [[ea, eb], [eb, ea]]) {
+                const key = `${sa}-${sb}`
+                if (visitedEdge.has(key)) continue
+                const face = []
+                let u = sa, v = sb
+                for (let i = 0; i < 8; i++) {
+                    visitedEdge.add(`${u}-${v}`)
+                    face.push(u)
+                    const nv = nextVert(u, v)
+                    u = v; v = nv
+                    if (u === sa && v === sb) break
+                }
+                if (face.length === 6) allHexFaces.push(face)
+            }
+        })
+
+        // Find the hex face that shares edge va-vb with the center pentagon.
+        function hexAdjacentTo(va, vb) {
+            return allHexFaces.find(face => {
+                const n = face.length
+                for (let i = 0; i < n; i++) {
+                    const a = face[i], b = face[(i+1)%n]
+                    if ((a===va&&b===vb)||(a===vb&&b===va)) return true
+                }
+                return false
+            })
+        }
+
+        // Find a pentagon (not the center one) that shares an edge with hexFace
+        // on a side that does NOT include both center-pent vertices.
+        function outerPentOf(hexFace, centerVIdxs) {
+            const cSet = new Set(centerVIdxs)
+            for (let i = 0; i < hexFace.length; i++) {
+                const a = hexFace[i], b = hexFace[(i+1)%hexFace.length]
+                if (cSet.has(a) && cSet.has(b)) continue
+                const pent = pentagons.find(pf => {
+                    for (let j = 0; j < pf.length; j++) {
+                        const pa = pf[j], pb = pf[(j+1)%pf.length]
+                        if ((pa===a&&pb===b)||(pa===b&&pb===a)) return true
+                    }
+                    return false
+                })
+                if (pent) return { pent, va: a, vb: b }
+            }
+            return null
+        }
+
+        const pentVIdxs = pentagons[0]
+        const localPts = {}, netPts = {}
+
+        // Center pentagon
+        localPts['PENT0'] = flattenLocal(pentVIdxs, v3d, scale)
+        netPts['PENT0'] = localPts['PENT0']
+
+        // 5 hexagons unfolded from the center pentagon's edges
+        const hexRing = []
+        for (let i = 0; i < 5; i++) {
+            const va = pentVIdxs[i], vb = pentVIdxs[(i+1)%5]
+            const hex = hexAdjacentTo(va, vb)
+            if (!hex) continue
+            const hexId = `HEX${i}`
+            localPts[hexId] = flattenLocal(hex, v3d, scale)
+            netPts[hexId] = unfold(netPts['PENT0'], localPts[hexId], va, vb)
+            hexRing.push({ id: hexId, face: hex })
+        }
+
+        // 5 outer pentagons unfolded from each hex's far edge
+        const outerPents = []
+        hexRing.forEach(({ id: hexId, face: hexFace }) => {
+            const res = outerPentOf(hexFace, pentVIdxs)
+            if (!res) return
+            const pentId = `PENT_${hexId}`
+            localPts[pentId] = flattenLocal(res.pent, v3d, scale)
+            netPts[pentId] = unfold(netPts[hexId], localPts[pentId], res.va, res.vb)
+            outerPents.push({ id: pentId, vIdxs: res.pent })
+        })
+
+        // Draw all panels
+        drawPanel(netPts['PENT0'], pentVIdxs, () => 'bow')
+        hexRing.forEach(({ id, face }) => drawPanel(netPts[id], face, () => 'bow'))
+        outerPents.forEach(({ id, vIdxs }) => drawPanel(netPts[id], vIdxs, () => 'bow'))
+    }
+
+    return g
+}
+
 function updateBall() {
     const pos = ballGroup.position.clone()
     const rot = ballGroup.rotation.clone()
@@ -569,7 +1094,32 @@ function updateBall() {
     scene.add(ballGroup)
 
     custScene.remove(previewBall)
-    previewBall = buildBallMesh(ballConfig, previewRadius)
+    if (custViewMode === 'flat') {
+        previewBall = buildFlatLayout(ballConfig)
+        custControls.autoRotate = false
+        // Disable 3D orbit — the flat layout is in the XY plane and the camera
+        // stays on the Z axis. Pan/zoom only from OrbitControls; 2D spin is
+        // handled by the separate flatDragRotate listener below.
+        custControls.enableRotate = false
+        custControls.enablePan = true
+        custControls.minPolarAngle = Math.PI / 2
+        custControls.maxPolarAngle = Math.PI / 2
+        custControls.minDistance = 1
+        custControls.maxDistance = 40
+        custCamera.position.set(0, 0, 9)
+        custCamera.lookAt(0, 0, 0)
+    } else {
+        previewBall = buildBallMesh(ballConfig, previewRadius)
+        custControls.autoRotate = true
+        custControls.enableRotate = true
+        custControls.enablePan = false
+        custControls.minPolarAngle = 0
+        custControls.maxPolarAngle = Math.PI
+        custControls.minDistance = 0.6
+        custControls.maxDistance = 3.0
+        custCamera.position.set(0, 0, 1.2)
+        custCamera.lookAt(0, 0, 0)
+    }
     custScene.add(previewBall)
 }
 
@@ -862,6 +1412,15 @@ document.querySelectorAll('.design-btn').forEach(btn => {
         document.querySelectorAll('.design-btn').forEach(b => b.classList.remove('active'))
         btn.classList.add('active')
         ballConfig.design = btn.dataset.design
+        updateBall()
+    })
+})
+
+document.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+        custViewMode = btn.dataset.view
         updateBall()
     })
 })
