@@ -326,7 +326,49 @@ const TRUNC_ICO = (() => {
         pentagons.push(idx)
     }
 
-    return { verts, edges, pentagons }
+    // ── Rotation-system face finder (pure array math, no THREE dependency) ──
+    // Builds an adjacency list, sorts each vertex's neighbours CW-from-outside,
+    // then traverses directed edges to collect all 20 hexagonal faces (length 6).
+    const adjI = new Map()
+    for (const [a, b] of edges) {
+        if (!adjI.has(a)) adjI.set(a, [])
+        if (!adjI.has(b)) adjI.set(b, [])
+        adjI.get(a).push(b); adjI.get(b).push(a)
+    }
+    const sortedNbI = verts.map((v0, vi) => {
+        const nb = adjI.get(vi)
+        const n0 = verts[nb[0]]
+        let tx = n0[0]-v0[0], ty = n0[1]-v0[1], tz = n0[2]-v0[2]
+        const d = tx*v0[0]+ty*v0[1]+tz*v0[2]
+        tx-=d*v0[0]; ty-=d*v0[1]; tz-=d*v0[2]
+        const tl = Math.sqrt(tx*tx+ty*ty+tz*tz)
+        tx/=tl; ty/=tl; tz/=tl
+        const bx=ty*v0[2]-tz*v0[1], by=tz*v0[0]-tx*v0[2], bz=tx*v0[1]-ty*v0[0]
+        return [...nb].sort((a,b) => {
+            const pa=[verts[a][0]-v0[0],verts[a][1]-v0[1],verts[a][2]-v0[2]]
+            const pb=[verts[b][0]-v0[0],verts[b][1]-v0[1],verts[b][2]-v0[2]]
+            return Math.atan2(pa[0]*bx+pa[1]*by+pa[2]*bz, pa[0]*tx+pa[1]*ty+pa[2]*tz)
+                 - Math.atan2(pb[0]*bx+pb[1]*by+pb[2]*bz, pb[0]*tx+pb[1]*ty+pb[2]*tz)
+        })
+    })
+    const hexFaces = []
+    const visitedI = new Set()
+    for (const [ea, eb] of edges) {
+        for (const [sa, sb] of [[ea,eb],[eb,ea]]) {
+            const key = `${sa}-${sb}`
+            if (visitedI.has(key)) continue
+            const face = []; let u=sa, v=sb
+            for (let i=0;i<8;i++) {
+                visitedI.add(`${u}-${v}`); face.push(u)
+                const nb=sortedNbI[v], idx=nb.indexOf(u)
+                const nv=nb[(idx-1+nb.length)%nb.length]; u=v; v=nv
+                if (u===sa&&v===sb) break
+            }
+            if (face.length===6) hexFaces.push(face)
+        }
+    }
+
+    return { verts, edges, pentagons, hexFaces }
 })()
 
 /**
@@ -358,6 +400,225 @@ function wavyGreatCircle(axisIdx, r, amplitude, freq, segments) {
         points.push(new THREE.Vector3(x / len * r, y / len * r, z / len * r))
     }
     return points
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Explode view helpers
+// ─────────────────────────────────────────────────────────────────────────────
+let custExplodeFactor = 0
+let custExplodePanels = []   // [{ mesh: THREE.Group, centroidDir: THREE.Vector3 }]
+
+function applyExplodeFactor(factor) {
+    const dist = factor * 0.9   // in local-space units; previewRadius applied at call site
+    custExplodePanels.forEach(({ mesh, centroidDir, baseRadius }) => {
+        mesh.position.copy(centroidDir.clone().multiplyScalar(dist * baseRadius))
+    })
+}
+
+// Build a spherical cap mesh from an ordered array of unit-sphere THREE.Vector3s.
+function _buildSphericalPanel(unitVecs, radius, mat) {
+    const n = unitVecs.length
+    let cx=0,cy=0,cz=0
+    unitVecs.forEach(v=>{cx+=v.x;cy+=v.y;cz+=v.z})
+    const cl = Math.sqrt(cx*cx+cy*cy+cz*cz)
+    const cen = new THREE.Vector3(cx/cl, cy/cl, cz/cl)
+    const r = radius * 0.9995
+    const sub = 16
+    const pos = []
+    for (let fi=0; fi<n; fi++) {
+        const vb = unitVecs[fi], vc = unitVecs[(fi+1)%n]
+        for (let i=0;i<sub;i++) {
+            for (let j=0;j<sub-i;j++) {
+                const bary=(t,s)=>new THREE.Vector3(
+                    (1-t-s)*cen.x+t*vb.x+s*vc.x,
+                    (1-t-s)*cen.y+t*vb.y+s*vc.y,
+                    (1-t-s)*cen.z+t*vb.z+s*vc.z
+                ).normalize().multiplyScalar(r)
+                const p1=bary(i/sub,j/sub), p2=bary((i+1)/sub,j/sub), p3=bary(i/sub,(j+1)/sub)
+                pos.push(p1.x,p1.y,p1.z, p2.x,p2.y,p2.z, p3.x,p3.y,p3.z)
+                if (i+j+1<sub) {
+                    const p4=bary((i+1)/sub,(j+1)/sub)
+                    pos.push(p2.x,p2.y,p2.z, p4.x,p4.y,p4.z, p3.x,p3.y,p3.z)
+                }
+            }
+        }
+    }
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    geo.computeVertexNormals()
+    return new THREE.Mesh(geo, mat)
+}
+
+function _buildPanelBorder(unitVecs, radius, mat) {
+    const n = unitVecs.length, sub = 24
+    const pts = []
+    for (let fi=0;fi<n;fi++) {
+        for (let s=0;s<=sub;s++) {
+            const t=s/sub
+            pts.push(unitVecs[fi].clone().lerp(unitVecs[(fi+1)%n],t).normalize().multiplyScalar(radius*1.001))
+        }
+    }
+    pts.push(pts[0].clone())
+    return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat)
+}
+
+function buildExplodedBall(config, radius) {
+    const group = new THREE.Group()
+    const panels = []
+
+    // Ghost inner sphere so the interior isn't pitch-black when spread wide
+    group.add(new THREE.Mesh(
+        new THREE.SphereGeometry(radius*0.92, 20, 20),
+        new THREE.MeshLambertMaterial({ color: 0x0a0a0a, side: THREE.BackSide,
+            transparent: true, opacity: 0.55 })
+    ))
+
+    const fillMat = new THREE.MeshLambertMaterial({
+        color: config.primaryColor, side: THREE.DoubleSide,
+        emissive: config.primaryColor, emissiveIntensity: 0.15
+    })
+    const pentFillMat = new THREE.MeshLambertMaterial({
+        color: config.secondaryColor, side: THREE.DoubleSide,
+        emissive: config.secondaryColor, emissiveIntensity: 0.15
+    })
+    const borderMat = new THREE.LineBasicMaterial({ color: config.secondaryColor })
+
+    function addPanel(uvecs, fillColor) {
+        const mat = fillColor === 'black' ? pentFillMat.clone() : fillMat.clone()
+        let cx=0,cy=0,cz=0
+        uvecs.forEach(v=>{cx+=v.x;cy+=v.y;cz+=v.z})
+        const cl=Math.sqrt(cx*cx+cy*cy+cz*cz)
+        const centroidDir = new THREE.Vector3(cx/cl, cy/cl, cz/cl)
+        const pg = new THREE.Group()
+        pg.add(_buildSphericalPanel(uvecs, radius, mat))
+        pg.add(_buildPanelBorder(uvecs, radius, borderMat))
+        group.add(pg)
+        panels.push({ mesh: pg, centroidDir, baseRadius: radius })
+    }
+
+    if (config.design === 'classic') {
+        const { verts, pentagons, hexFaces } = TRUNC_ICO
+        const v3d = verts.map(v => new THREE.Vector3(v[0], v[1], v[2]))
+        pentagons.forEach(pf => addPanel(pf.map(i => v3d[i]), 'black'))
+        hexFaces.forEach(hf => addPanel(hf.map(i => v3d[i])))
+
+    } else if (config.design === 'jabulani') {
+        const s = 1/Math.sqrt(3)
+        const tv = [[s,s,s],[s,-s,-s],[-s,s,-s],[-s,-s,s]]
+        const raw = []
+        for (let i=0;i<4;i++) for (let j=i+1;j<4;j++) {
+            const a=tv[i], b=tv[j]
+            raw.push([(2*a[0]+b[0])/3,(2*a[1]+b[1])/3,(2*a[2]+b[2])/3],
+                     [(a[0]+2*b[0])/3,(a[1]+2*b[1])/3,(a[2]+2*b[2])/3])
+        }
+        const jv = raw.map(v => { const l=Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]); return new THREE.Vector3(v[0]/l,v[1]/l,v[2]/l) })
+        const jFaces = [[0,2,4],[1,6,8],[3,7,10],[5,9,11],
+         [6,8,9,11,10,7],[2,4,5,11,10,3],[4,0,1,8,9,5],[0,2,3,7,6,1]]
+        jFaces.forEach(fi => addPanel(fi.map(i => jv[i])))
+
+    } else if (config.design === 'brazuca') {
+        const cs = 1/Math.sqrt(3)
+        const bv = [[cs,cs,cs],[cs,cs,-cs],[cs,-cs,cs],[cs,-cs,-cs],
+                    [-cs,cs,cs],[-cs,cs,-cs],[-cs,-cs,cs],[-cs,-cs,-cs]]
+            .map(v => new THREE.Vector3(v[0],v[1],v[2]))
+        const bFaces = [[0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]]
+        const ce = [[0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7]]
+
+        // Pre-compute S-curve for every directed cube edge (unit-sphere points)
+        const sCurveSeg = 32
+        const scMap = new Map()
+        for (const [ai,bi] of ce) {
+            const a = bv[ai], b = bv[bi]
+            const omega = Math.acos(Math.min(1, a.dot(b))), sinO = Math.sin(omega)
+            const edDir = b.clone().sub(a).normalize()
+            const pts = []
+            for (let i=0;i<=sCurveSeg;i++) {
+                const t = i/sCurveSeg
+                const p = a.clone().multiplyScalar(Math.sin((1-t)*omega)/sinO)
+                    .add(b.clone().multiplyScalar(Math.sin(t*omega)/sinO))
+                const rad = p.clone().normalize()
+                const perp = new THREE.Vector3().crossVectors(rad, edDir).normalize()
+                const taper = Math.sin(Math.PI*t)
+                const raw = Math.sin(2*Math.PI*t)
+                const sharp = Math.sign(raw)*Math.pow(Math.abs(raw),0.45)
+                p.add(perp.multiplyScalar(0.50*sharp*taper))
+                p.normalize()
+                pts.push(p)
+            }
+            scMap.set(`${ai}-${bi}`, pts)
+            scMap.set(`${bi}-${ai}`, [...pts].reverse())
+        }
+        function sampleSC(curve, t) {
+            const idx = t*(curve.length-1)
+            const i = Math.min(Math.floor(idx), curve.length-2)
+            return curve[i].clone().lerp(curve[i+1], idx-i)
+        }
+
+        // Build each face as a Coons patch bounded by 4 S-curves
+        const gridN = 24, rB = radius*0.9995
+        bFaces.forEach(fi => {
+            // fi = [v0, v1, v2, v3] in winding order
+            // Coons patch edges:
+            //   bottom(u): v0→v1   top(u): v3→v2   left(v): v0→v3   right(v): v1→v2
+            const bottom = scMap.get(`${fi[0]}-${fi[1]}`)
+            const rightC = scMap.get(`${fi[1]}-${fi[2]}`)
+            const topC   = scMap.get(`${fi[3]}-${fi[2]}`)
+            const leftC  = scMap.get(`${fi[0]}-${fi[3]}`)
+            const P00=bv[fi[0]], P10=bv[fi[1]], P11=bv[fi[2]], P01=bv[fi[3]]
+
+            const pos = []
+            for (let iv=0;iv<gridN;iv++) {
+                for (let iu=0;iu<gridN;iu++) {
+                    const corners = [[iu/gridN,iv/gridN],[(iu+1)/gridN,iv/gridN],
+                                     [(iu+1)/gridN,(iv+1)/gridN],[iu/gridN,(iv+1)/gridN]]
+                    const vs = corners.map(([u,v]) => {
+                        const bu=sampleSC(bottom,u), tu=sampleSC(topC,u)
+                        const lv=sampleSC(leftC,v),  rv=sampleSC(rightC,v)
+                        return new THREE.Vector3(
+                            (1-v)*bu.x+v*tu.x+(1-u)*lv.x+u*rv.x
+                              -(1-u)*(1-v)*P00.x-u*(1-v)*P10.x-u*v*P11.x-(1-u)*v*P01.x,
+                            (1-v)*bu.y+v*tu.y+(1-u)*lv.y+u*rv.y
+                              -(1-u)*(1-v)*P00.y-u*(1-v)*P10.y-u*v*P11.y-(1-u)*v*P01.y,
+                            (1-v)*bu.z+v*tu.z+(1-u)*lv.z+u*rv.z
+                              -(1-u)*(1-v)*P00.z-u*(1-v)*P10.z-u*v*P11.z-(1-u)*v*P01.z
+                        ).normalize().multiplyScalar(rB)
+                    })
+                    pos.push(vs[0].x,vs[0].y,vs[0].z, vs[1].x,vs[1].y,vs[1].z, vs[2].x,vs[2].y,vs[2].z)
+                    pos.push(vs[0].x,vs[0].y,vs[0].z, vs[2].x,vs[2].y,vs[2].z, vs[3].x,vs[3].y,vs[3].z)
+                }
+            }
+            const geo = new THREE.BufferGeometry()
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+            geo.computeVertexNormals()
+
+            let cx2=0,cy2=0,cz2=0
+            fi.forEach(i => { cx2+=bv[i].x; cy2+=bv[i].y; cz2+=bv[i].z })
+            const cl2 = Math.sqrt(cx2*cx2+cy2*cy2+cz2*cz2)
+            const centroidDir = new THREE.Vector3(cx2/cl2, cy2/cl2, cz2/cl2)
+
+            const pg = new THREE.Group()
+            pg.add(new THREE.Mesh(geo, fillMat.clone()))
+
+            // S-curved border line
+            const bpts = []
+            const curves = [scMap.get(`${fi[0]}-${fi[1]}`), scMap.get(`${fi[1]}-${fi[2]}`),
+                            scMap.get(`${fi[2]}-${fi[3]}`), scMap.get(`${fi[3]}-${fi[0]}`)]
+            for (const c of curves) for (const p of c) bpts.push(p.clone().multiplyScalar(radius*1.001))
+            bpts.push(bpts[0].clone())
+            pg.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(bpts), borderMat))
+
+            group.add(pg)
+            panels.push({ mesh: pg, centroidDir, baseRadius: radius })
+        })
+
+    } else if (config.design === 'trionda') {
+        const cs = 1/Math.sqrt(3)
+        const tvo = [new THREE.Vector3(cs,cs,cs),new THREE.Vector3(cs,-cs,-cs),
+                     new THREE.Vector3(-cs,cs,-cs),new THREE.Vector3(-cs,-cs,cs)]
+        ;[[1,2,3],[0,2,3],[0,1,3],[0,1,2]].forEach(fi => addPanel(fi.map(i => tvo[i])))
+    }
+
+    return { group, panels }
 }
 
 function buildBallMesh(config, radius) {
@@ -396,7 +657,6 @@ function buildBallMesh(config, radius) {
             group.add(joint)
         }
 
-        // Filled pentagon faces — subdivided to follow sphere curvature
         const pentR = radius * 1.002
         const pentMat = new THREE.MeshLambertMaterial({ color: config.secondaryColor })
 
@@ -804,8 +1064,8 @@ function buildFlatLayout(config) {
         return pts
     }
 
-    // Shared: draw a filled panel with curved/S-curved edges
-    // edgeTypeFn(vIdxA, vIdxB, i) => 'bow' | 'mid' | 'scurve'
+    // Shared: draw a filled panel with curved/S-curved/straight edges
+    // edgeTypeFn(vIdxA, vIdxB, i) => 'bow' | 'mid' | 'scurve' | 'straight'
     function drawPanel(pts, vIdxList, edgeTypeFn) {
         const n = pts.length
         const cx = pts.reduce((s,p) => s+p.x, 0)/n
@@ -814,24 +1074,28 @@ function buildFlatLayout(config) {
         shape.moveTo(pts[0].x, pts[0].y)
         for (let i = 0; i < n; i++) {
             const a = pts[i], b = pts[(i+1)%n]
-            const type = edgeTypeFn ? edgeTypeFn(vIdxList[i], vIdxList[(i+1)%n], i) : 'bow'
-            const ex = b.x-a.x, ey = b.y-a.y, el = Math.sqrt(ex*ex+ey*ey)
-            const px = -ey/el, py = ex/el
-            const mx = (a.x+b.x)/2, my = (a.y+b.y)/2
-            const dot = px*(cx-mx) + py*(cy-my)
-            if (type === 'scurve') {
-                const amp = el * 0.38
-                shape.bezierCurveTo(
-                    a.x + ex*0.25 + px*amp, a.y + ey*0.25 + py*amp,
-                    a.x + ex*0.75 - px*amp, a.y + ey*0.75 - py*amp,
-                    b.x, b.y
-                )
-            } else if (type === 'mid') {
-                const bow = (dot > 0 ? 1 : -1) * el * 0.28
-                shape.quadraticCurveTo(mx + px*bow, my + py*bow, b.x, b.y)
+            const type = edgeTypeFn ? edgeTypeFn(vIdxList[i], vIdxList[(i+1)%n], i) : 'straight'
+            if (type === 'straight') {
+                shape.lineTo(b.x, b.y)
             } else {
-                const bow = (dot > 0 ? -1 : 1) * el * 0.28
-                shape.quadraticCurveTo(mx + px*bow, my + py*bow, b.x, b.y)
+                const ex = b.x-a.x, ey = b.y-a.y, el = Math.sqrt(ex*ex+ey*ey)
+                const px = -ey/el, py = ex/el
+                const mx = (a.x+b.x)/2, my = (a.y+b.y)/2
+                const dot = px*(cx-mx) + py*(cy-my)
+                if (type === 'scurve') {
+                    const amp = el * 0.38
+                    shape.bezierCurveTo(
+                        a.x + ex*0.25 + px*amp, a.y + ey*0.25 + py*amp,
+                        a.x + ex*0.75 - px*amp, a.y + ey*0.75 - py*amp,
+                        b.x, b.y
+                    )
+                } else if (type === 'mid') {
+                    const bow = (dot > 0 ? 1 : -1) * el * 0.28
+                    shape.quadraticCurveTo(mx + px*bow, my + py*bow, b.x, b.y)
+                } else {
+                    const bow = (dot > 0 ? -1 : 1) * el * 0.28
+                    shape.quadraticCurveTo(mx + px*bow, my + py*bow, b.x, b.y)
+                }
             }
         }
         g.add(new THREE.Mesh(new THREE.ShapeGeometry(shape), fillMat.clone()))
@@ -954,131 +1218,64 @@ function buildFlatLayout(config) {
 
     // ═══════════════ CLASSIC ═══════════════
     } else if (config.design === 'classic') {
-        const { verts, edges, pentagons } = TRUNC_ICO
+        const { verts, edges, pentagons, hexFaces } = TRUNC_ICO
         const v3d = verts.map(v => new THREE.Vector3(v[0], v[1], v[2]))
-        const scale = 1.6
+        const scale = 0.7
 
-        // Build adjacency
-        const adj = new Map()
-        edges.forEach(([a, b]) => {
-            if (!adj.has(a)) adj.set(a, [])
-            if (!adj.has(b)) adj.set(b, [])
-            adj.get(a).push(b)
-            adj.get(b).push(a)
-        })
+        // All 32 faces: 12 pentagons (length 5) + 20 hexagons (length 6)
+        const allFaces = []
+        pentagons.forEach((f, i) => allFaces.push({ id: `P${i}`, vIdxs: f, isPent: true }))
+        hexFaces.forEach((f, i) => allFaces.push({ id: `H${i}`, vIdxs: f, isPent: false }))
 
-        // Sort each vertex's neighbors CCW when viewed from outside the sphere.
-        // This defines the rotation system that encodes all faces of the polyhedron.
-        const sortedNb = verts.map((_, vi) => {
-            const pos = v3d[vi]
-            const normal = pos.clone().normalize()
-            const nb = adj.get(vi)
-            const first = v3d[nb[0]].clone().sub(pos)
-            const tang = first.clone()
-                .sub(normal.clone().multiplyScalar(first.dot(normal)))
-                .normalize()
-            const bitan = new THREE.Vector3().crossVectors(tang, normal)
-            return [...nb].sort((a, b) => {
-                const pa = v3d[a].clone().sub(pos)
-                const pb = v3d[b].clone().sub(pos)
-                return Math.atan2(pa.dot(bitan), pa.dot(tang))
-                     - Math.atan2(pb.dot(bitan), pb.dot(tang))
-            })
-        })
+        // Edge-key helper
+        function ek(a,b) { return a<b ? `${a}-${b}` : `${b}-${a}` }
 
-        // For directed edge a→b, the next directed edge in the CCW face traversal
-        // is b→prev(a) in the CCW neighbor list of b.
-        function nextVert(a, b) {
-            const nb = sortedNb[b]
-            const idx = nb.indexOf(a)
-            return nb[(idx - 1 + nb.length) % nb.length]
-        }
-
-        // Trace all faces using the rotation system; collect hexagonal faces (length 6).
-        const visitedEdge = new Set()
-        const allHexFaces = []
-        edges.forEach(([ea, eb]) => {
-            for (const [sa, sb] of [[ea, eb], [eb, ea]]) {
-                const key = `${sa}-${sb}`
-                if (visitedEdge.has(key)) continue
-                const face = []
-                let u = sa, v = sb
-                for (let i = 0; i < 8; i++) {
-                    visitedEdge.add(`${u}-${v}`)
-                    face.push(u)
-                    const nv = nextVert(u, v)
-                    u = v; v = nv
-                    if (u === sa && v === sb) break
-                }
-                if (face.length === 6) allHexFaces.push(face)
+        // Build edge → face adjacency
+        const edgeToFaces = new Map()
+        allFaces.forEach((face, fi) => {
+            const n = face.vIdxs.length
+            for (let i=0;i<n;i++) {
+                const key = ek(face.vIdxs[i], face.vIdxs[(i+1)%n])
+                if (!edgeToFaces.has(key)) edgeToFaces.set(key, [])
+                edgeToFaces.get(key).push(fi)
             }
         })
 
-        // Find the hex face that shares edge va-vb with the center pentagon.
-        function hexAdjacentTo(va, vb) {
-            return allHexFaces.find(face => {
-                const n = face.length
-                for (let i = 0; i < n; i++) {
-                    const a = face[i], b = face[(i+1)%n]
-                    if ((a===va&&b===vb)||(a===vb&&b===va)) return true
-                }
-                return false
-            })
-        }
-
-        // Find a pentagon (not the center one) that shares an edge with hexFace
-        // on a side that does NOT include both center-pent vertices.
-        function outerPentOf(hexFace, centerVIdxs) {
-            const cSet = new Set(centerVIdxs)
-            for (let i = 0; i < hexFace.length; i++) {
-                const a = hexFace[i], b = hexFace[(i+1)%hexFace.length]
-                if (cSet.has(a) && cSet.has(b)) continue
-                const pent = pentagons.find(pf => {
-                    for (let j = 0; j < pf.length; j++) {
-                        const pa = pf[j], pb = pf[(j+1)%pf.length]
-                        if ((pa===a&&pb===b)||(pa===b&&pb===a)) return true
-                    }
-                    return false
-                })
-                if (pent) return { pent, va: a, vb: b }
-            }
-            return null
-        }
-
-        const pentVIdxs = pentagons[0]
+        // BFS unfold from face 0 (first pentagon) to place all 32 faces
         const localPts = {}, netPts = {}
+        allFaces.forEach(f => { localPts[f.id] = flattenLocal(f.vIdxs, v3d, scale) })
+        const placed = new Set()
+        const queue = [0]
+        placed.add(0)
+        netPts[allFaces[0].id] = localPts[allFaces[0].id]
 
-        // Center pentagon
-        localPts['PENT0'] = flattenLocal(pentVIdxs, v3d, scale)
-        netPts['PENT0'] = localPts['PENT0']
-
-        // 5 hexagons unfolded from the center pentagon's edges
-        const hexRing = []
-        for (let i = 0; i < 5; i++) {
-            const va = pentVIdxs[i], vb = pentVIdxs[(i+1)%5]
-            const hex = hexAdjacentTo(va, vb)
-            if (!hex) continue
-            const hexId = `HEX${i}`
-            localPts[hexId] = flattenLocal(hex, v3d, scale)
-            netPts[hexId] = unfold(netPts['PENT0'], localPts[hexId], va, vb)
-            hexRing.push({ id: hexId, face: hex })
+        while (queue.length > 0) {
+            const ci = queue.shift()
+            const cFace = allFaces[ci]
+            const n = cFace.vIdxs.length
+            for (let e=0;e<n;e++) {
+                const va = cFace.vIdxs[e], vb = cFace.vIdxs[(e+1)%n]
+                const key = ek(va, vb)
+                const neighbors = edgeToFaces.get(key)
+                if (!neighbors) continue
+                for (const ni of neighbors) {
+                    if (placed.has(ni)) continue
+                    placed.add(ni)
+                    const nFace = allFaces[ni]
+                    netPts[nFace.id] = unfold(netPts[cFace.id], localPts[nFace.id], va, vb)
+                    queue.push(ni)
+                }
+            }
         }
 
-        // 5 outer pentagons unfolded from each hex's far edge
-        const outerPents = []
-        hexRing.forEach(({ id: hexId, face: hexFace }) => {
-            const res = outerPentOf(hexFace, pentVIdxs)
-            if (!res) return
-            const pentId = `PENT_${hexId}`
-            localPts[pentId] = flattenLocal(res.pent, v3d, scale)
-            netPts[pentId] = unfold(netPts[hexId], localPts[pentId], res.va, res.vb)
-            outerPents.push({ id: pentId, vIdxs: res.pent })
+        const pentFlatMat = new THREE.MeshBasicMaterial({ color: config.secondaryColor, side: THREE.DoubleSide })
+        allFaces.forEach(face => {
+            if (!netPts[face.id]) return
+            drawPanel(netPts[face.id], face.vIdxs, () => 'straight')
+            if (face.isPent) {
+                g.children[g.children.length - 2].material = pentFlatMat
+            }
         })
-
-        // Draw all panels
-        drawPanel(netPts['PENT0'], pentVIdxs, () => 'bow')
-        hexRing.forEach(({ id, face }) => drawPanel(netPts[id], face, () => 'bow'))
-        outerPents.forEach(({ id, vIdxs }) => drawPanel(netPts[id], vIdxs, () => 'bow'))
     }
 
     return g
@@ -1105,18 +1302,27 @@ function updateBall() {
         custControls.minPolarAngle = Math.PI / 2
         custControls.maxPolarAngle = Math.PI / 2
         custControls.minDistance = 1
-        custControls.maxDistance = 40
-        custCamera.position.set(0, 0, 9)
+        custControls.maxDistance = 60
+        custCamera.position.set(0, 0, ballConfig.design === 'classic' ? 18 : 9)
         custCamera.lookAt(0, 0, 0)
     } else {
-        previewBall = buildBallMesh(ballConfig, previewRadius)
+        // 3D ball view — use exploded panels when factor > 0, normal ball otherwise
+        custExplodePanels = []
+        if (custExplodeFactor > 0) {
+            const result = buildExplodedBall(ballConfig, previewRadius)
+            previewBall = result.group
+            custExplodePanels = result.panels
+            applyExplodeFactor(custExplodeFactor)
+        } else {
+            previewBall = buildBallMesh(ballConfig, previewRadius)
+        }
         custControls.autoRotate = true
         custControls.enableRotate = true
         custControls.enablePan = false
         custControls.minPolarAngle = 0
         custControls.maxPolarAngle = Math.PI
         custControls.minDistance = 0.6
-        custControls.maxDistance = 3.0
+        custControls.maxDistance = 3.0 + custExplodeFactor * 5.0
         custCamera.position.set(0, 0, 1.2)
         custCamera.lookAt(0, 0, 0)
     }
@@ -1434,6 +1640,27 @@ document.getElementById('secondary-color').addEventListener('input', (e) => {
     ballConfig.secondaryColor = e.target.value
     updateBall()
 })
+
+{
+    const explodeSlider = document.getElementById('explode-slider')
+    const explodeVal    = document.getElementById('explode-val')
+
+    explodeSlider.addEventListener('input', (e) => {
+        const prev = custExplodeFactor
+        custExplodeFactor = parseFloat(e.target.value)
+        explodeVal.textContent = Math.round(custExplodeFactor * 100) + '%'
+
+        if (custViewMode === 'flat') return
+
+        const crossedZero = (prev === 0) !== (custExplodeFactor === 0)
+        if (crossedZero) {
+            updateBall()
+        } else if (custExplodeFactor > 0 && custExplodePanels.length > 0) {
+            applyExplodeFactor(custExplodeFactor)
+        }
+        custControls.maxDistance = 3.0 + custExplodeFactor * 5.0
+    })
+}
 
 /**
  * Bento Grid — Drag-to-Resize

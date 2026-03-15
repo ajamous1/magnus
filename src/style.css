@@ -213,6 +213,54 @@ body {
     border-radius: 4px;
 }
 
+/* Explode slider */
+.explode-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#explode-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: #2a2a2a;
+    outline: none;
+    cursor: pointer;
+}
+
+#explode-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #4af;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+#explode-slider::-webkit-slider-thumb:hover { background: #6cf; }
+
+#explode-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 50%;
+    background: #4af;
+    cursor: pointer;
+}
+
+.explode-val {
+    font-size: 11px;
+    color: #4af;
+    min-width: 30px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
 /* Panel fullscreen button */
 .panel-fs-btn {
     position: absolute;
