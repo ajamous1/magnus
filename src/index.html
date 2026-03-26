@@ -15,6 +15,13 @@
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
                 </button>
                 <canvas class="webgl"></canvas>
+                <div class="vector-legend" id="vector-legend">
+                    <span class="dot v-velocity"></span><span>Velocity</span>
+                    <span class="dot v-drag"></span><span>Drag</span>
+                    <span class="dot v-magnus"></span><span>Magnus</span>
+                    <span class="dot v-gravity"></span><span>Gravity</span>
+                    <span class="dot v-wind"></span><span>Wind</span>
+                </div>
             </div>
             <div class="resize-handle resize-v"></div>
             <div class="bento-panel" id="panel-customizer">
@@ -74,9 +81,8 @@
                     <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
                 </button>
-                <div class="panel-content">
-                    <span class="panel-label">Panel 4</span>
-                </div>
+                <canvas class="panel4-canvas"></canvas>
+                <div class="panel4-label">Birdseye Tracker</div>
             </div>
             <div class="resize-handle resize-v"></div>
             <div class="bento-panel" id="panel-5">
@@ -84,9 +90,14 @@
                     <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
                 </button>
-                <div class="panel-content">
-                    <span class="panel-label">Panel 5</span>
+                <canvas class="panel5-canvas"></canvas>
+                <div class="panel5-stats">
+                    <div class="panel5-stat"><span>Peak V</span><strong id="metric-power">--</strong></div>
+                    <div class="panel5-stat"><span>Avg Cd</span><strong id="metric-curve">--</strong></div>
+                    <div class="panel5-stat"><span>Max Cl</span><strong id="metric-spin">--</strong></div>
+                    <div class="panel5-stat"><span>Reynolds</span><strong id="metric-target">--</strong></div>
                 </div>
+                <div class="panel5-label">Flight Dynamics</div>
             </div>
         </div>
     </div>

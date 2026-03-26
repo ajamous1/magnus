@@ -122,6 +122,41 @@ body {
     cursor: default;
 }
 
+.vector-legend {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    z-index: 8;
+    display: none;
+    grid-template-columns: auto auto;
+    gap: 4px 8px;
+    align-items: center;
+    font-size: 10px;
+    color: #9b9b9b;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.42);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    pointer-events: none;
+}
+
+.vector-legend.visible {
+    display: grid;
+}
+
+.vector-legend .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    display: inline-block;
+}
+
+.v-velocity { background: #4a9eff; }
+.v-drag { background: #ffd166; }
+.v-magnus { background: #ff6b6b; }
+.v-gravity { background: #b084ff; }
+.v-wind { background: #5be7c4; }
+
 /* Customizer preview */
 .customizer-viewport {
     flex: 1;
@@ -340,6 +375,90 @@ body {
     font-weight: 500;
     color: #333;
     letter-spacing: 0.02em;
+}
+
+/* Panel 4 + 5 data views */
+.panel4-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    outline: none;
+}
+
+.panel5-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    outline: none;
+}
+
+.panel4-label {
+    position: absolute;
+    bottom: 10px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #444;
+    pointer-events: none;
+}
+
+.panel5-label {
+    position: absolute;
+    bottom: 10px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #444;
+    pointer-events: none;
+}
+
+.panel5-stats {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 44px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    pointer-events: none;
+}
+
+.panel5-stat {
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid #1f1f1f;
+    border-radius: 8px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.panel5-stat span {
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #5b5b5b;
+}
+
+.panel5-stat strong {
+    font-size: 12px;
+    font-weight: 600;
+    color: #bfbfbf;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1320px) {
+    .panel5-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 /* Prevent selection during resize */

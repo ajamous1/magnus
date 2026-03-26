@@ -4,22 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Magnus</title>
-  <script type="module" crossorigin src="/assets/index-CoTVpH8F.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-BylriPAv.css">
+  <script type="module" crossorigin src="/assets/index-Ce41MSmh.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BriOt-14.css">
 </head>
 <body>
     <div class="bento-grid">
         <div class="bento-row" id="top-row">
             <div class="bento-panel" id="panel-shooter">
-                <button type="button" class="panel-fs-btn" title="Toggle fullscreen">
+                <button class="panel-fs-btn" title="Toggle fullscreen">
                     <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
                 </button>
                 <canvas class="webgl"></canvas>
+                <div class="vector-legend" id="vector-legend">
+                    <span class="dot v-velocity"></span><span>Velocity</span>
+                    <span class="dot v-drag"></span><span>Drag</span>
+                    <span class="dot v-magnus"></span><span>Magnus</span>
+                    <span class="dot v-gravity"></span><span>Gravity</span>
+                    <span class="dot v-wind"></span><span>Wind</span>
+                </div>
             </div>
             <div class="resize-handle resize-v"></div>
             <div class="bento-panel" id="panel-customizer">
-                <button type="button" class="panel-fs-btn" title="Toggle fullscreen">
+                <button class="panel-fs-btn" title="Toggle fullscreen">
                     <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
                 </button>
@@ -28,16 +35,20 @@
                 </div>
                 <div class="customizer-controls">
                     <div class="control-group">
-                        <span class="control-label">Design</span>
+                        <span class="control-label">View</span>
                         <div class="design-buttons">
-                            <button type="button" class="design-btn active" data-design="classic">Classic</button>
-                            <button type="button" class="design-btn" data-design="jabulani">Jabulani</button>
-                            <button type="button" class="design-btn" data-design="brazuca">Brazuca</button>
-                            <button type="button" class="design-btn" data-design="trionda">Trionda</button>
+                            <button class="view-btn active" data-view="ball">3D</button>
+                            <button class="view-btn" data-view="flat">Panels</button>
                         </div>
                     </div>
                     <div class="control-group">
-                        <button type="button" id="net-view-btn" class="design-btn net-view-btn">Net View</button>
+                        <span class="control-label">Design</span>
+                        <div class="design-buttons">
+                            <button class="design-btn active" data-design="classic">Classic</button>
+                            <button class="design-btn" data-design="jabulani">Jabulani</button>
+                            <button class="design-btn" data-design="brazuca">Brazuca</button>
+                            <button class="design-btn" data-design="trionda">Trionda</button>
+                        </div>
                     </div>
                     <div class="control-group">
                         <span class="control-label">Primary</span>
@@ -47,40 +58,47 @@
                         <span class="control-label">Stitching</span>
                         <input type="color" class="color-picker" id="secondary-color" value="#333333">
                     </div>
+                    <div class="control-group explode-control">
+                        <span class="control-label">Explode</span>
+                        <div class="explode-row">
+                            <input type="range" id="explode-slider" min="0" max="1" step="0.005" value="0">
+                            <span class="explode-val" id="explode-val">0%</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="resize-handle resize-h"></div>
         <div class="bento-row" id="bottom-row">
             <div class="bento-panel" id="panel-3">
-                <button type="button" class="panel-fs-btn" title="Toggle fullscreen">
+                <button class="panel-fs-btn" title="Toggle fullscreen">
                     <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
                 </button>
             </div>
             <div class="resize-handle resize-v"></div>
             <div class="bento-panel" id="panel-4">
-                <button type="button" class="panel-fs-btn" title="Toggle fullscreen">
+                <button class="panel-fs-btn" title="Toggle fullscreen">
                     <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
                 </button>
-                <div class="panel-content">
-                    <span class="panel-label">Panel 4</span>
-                </div>
+                <canvas class="panel4-canvas"></canvas>
+                <div class="panel4-label">Birdseye Tracker</div>
             </div>
             <div class="resize-handle resize-v"></div>
             <div class="bento-panel" id="panel-5">
-                <button type="button" class="panel-fs-btn" title="Toggle fullscreen">
+                <button class="panel-fs-btn" title="Toggle fullscreen">
                     <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
                 </button>
-                <div class="debug-console">
-                    <div class="debug-console-header">
-                        <span class="debug-console-title">Debug Console</span>
-                        <button type="button" class="debug-console-clear" id="debug-clear-btn">Clear</button>
-                    </div>
-                    <div class="debug-console-log" id="debug-log"></div>
+                <canvas class="panel5-canvas"></canvas>
+                <div class="panel5-stats">
+                    <div class="panel5-stat"><span>Peak V</span><strong id="metric-power">--</strong></div>
+                    <div class="panel5-stat"><span>Avg Cd</span><strong id="metric-curve">--</strong></div>
+                    <div class="panel5-stat"><span>Max Cl</span><strong id="metric-spin">--</strong></div>
+                    <div class="panel5-stat"><span>Reynolds</span><strong id="metric-target">--</strong></div>
                 </div>
+                <div class="panel5-label">Flight Dynamics</div>
             </div>
         </div>
     </div>

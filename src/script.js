@@ -16,7 +16,15 @@ const debugParams = {
     randomness: 1.0,
     windSpeed: 0,
     gravity: 1.0,
-    orbitControls: false
+    orbitControls: false,
+    vectorOverlay: false,
+    showVelocityVector: true,
+    showMagnusVector: true,
+    showDragVector: false,
+    showGravityVector: true,
+    showWindVector: false,
+    visualFilter: 'none',
+    filterStrength: 1.0
 }
 
 const kickFolder = gui.addFolder('Kick')
@@ -36,6 +44,22 @@ settingsFolder.add(debugParams, 'orbitControls').name('Orbit Controls').onChange
     controls.enabled = val
 })
 
+const vectorsFolder = gui.addFolder('Vectors')
+vectorsFolder.add(debugParams, 'vectorOverlay').name('Show Vectors').onChange(() => updateForceVectors())
+vectorsFolder.add(debugParams, 'showVelocityVector').name('Velocity').onChange(() => updateForceVectors())
+vectorsFolder.add(debugParams, 'showMagnusVector').name('Magnus').onChange(() => updateForceVectors())
+vectorsFolder.add(debugParams, 'showDragVector').name('Drag').onChange(() => updateForceVectors())
+vectorsFolder.add(debugParams, 'showGravityVector').name('Gravity').onChange(() => updateForceVectors())
+vectorsFolder.add(debugParams, 'showWindVector').name('Wind').onChange(() => updateForceVectors())
+
+const filtersFolder = gui.addFolder('Filters')
+filtersFolder.add(debugParams, 'visualFilter', ['none', 'thermal', 'wireframe', 'fluidDynamics', 'highContrast', 'nightVision', 'blueprint'])
+    .name('View Filter')
+    .onChange(() => applyVisualFilter())
+filtersFolder.add(debugParams, 'filterStrength', 0.5, 1.5, 0.05)
+    .name('Filter Strength')
+    .onChange(() => applyVisualFilter())
+
 // Toggle GUI with H key
 window.addEventListener('keydown', (e) => {
     if (e.key === 'h' || e.key === 'H') gui._hidden ? gui.show() : gui.hide()
@@ -46,9 +70,221 @@ window.addEventListener('keydown', (e) => {
  */
 const canvas = document.querySelector('canvas.webgl')
 const shooterPanel = document.getElementById('panel-shooter')
+const panel4Canvas = document.querySelector('canvas.panel4-canvas')
+const panel4Panel = document.getElementById('panel-4')
+const panel5Canvas = document.querySelector('canvas.panel5-canvas')
+const panel5Panel = document.getElementById('panel-5')
+const vectorLegend = document.getElementById('vector-legend')
 const scene = new THREE.Scene()
 scene.background = new THREE.Color('#000000')
 scene.fog = new THREE.FogExp2('#000000', 0.015)
+
+const thermalUniforms = {
+    uTime: { value: 0 },
+    uStrength: { value: 1 },
+    uBallPos: { value: new THREE.Vector3() },
+    uForce: { value: 0 }
+}
+
+const thermalOverrideMaterial = new THREE.ShaderMaterial({
+    uniforms: thermalUniforms,
+    vertexShader: `
+        varying vec3 vNormalW;
+        varying vec3 vWorldPos;
+        void main() {
+            vec4 wp = modelMatrix * vec4(position, 1.0);
+            vWorldPos = wp.xyz;
+            vNormalW = normalize(mat3(modelMatrix) * normal);
+            gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+    `,
+    fragmentShader: `
+        uniform float uTime;
+        uniform float uStrength;
+        uniform vec3 uBallPos;
+        uniform float uForce;
+        varying vec3 vNormalW;
+        varying vec3 vWorldPos;
+
+        float hash12(vec2 p) {
+            vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+            p3 += dot(p3, p3.yzx + 33.33);
+            return fract((p3.x + p3.y) * p3.z);
+        }
+
+        float noise2(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            float a = hash12(i + vec2(0.0, 0.0));
+            float b = hash12(i + vec2(1.0, 0.0));
+            float c = hash12(i + vec2(0.0, 1.0));
+            float d = hash12(i + vec2(1.0, 1.0));
+            return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+
+        float fbm(vec2 p) {
+            float v = 0.0;
+            float a = 0.62;
+            v += a * noise2(p);
+            p = p * 2.05 + vec2(7.2, 3.9);
+            a *= 0.48;
+            v += a * noise2(p);
+            return v;
+        }
+
+        vec3 thermalPalette(float t) {
+            vec3 c0 = vec3(0.01, 0.03, 0.16);  // cold black-blue
+            vec3 c1 = vec3(0.03, 0.12, 0.50);  // deep blue
+            vec3 c2 = vec3(0.07, 0.38, 0.88);  // blue-cyan
+            vec3 c3 = vec3(0.12, 0.70, 0.25);  // muted green
+            vec3 c4 = vec3(0.90, 0.86, 0.10);  // yellow
+            vec3 c5 = vec3(0.90, 0.22, 0.06);  // hot red
+            vec3 c6 = vec3(0.95, 0.82, 0.94);  // clipped pink-white
+            if (t < 0.14) return mix(c0, c1, t / 0.14);
+            if (t < 0.32) return mix(c1, c2, (t - 0.14) / 0.18);
+            if (t < 0.52) return mix(c2, c3, (t - 0.32) / 0.20);
+            if (t < 0.70) return mix(c3, c4, (t - 0.52) / 0.18);
+            if (t < 0.88) return mix(c4, c5, (t - 0.70) / 0.18);
+            return mix(c5, c6, (t - 0.88) / 0.12);
+        }
+
+        void main() {
+            vec3 n = normalize(vNormalW);
+            vec3 viewDir = normalize(cameraPosition - vWorldPos);
+            float distCam = length(cameraPosition - vWorldPos);
+            float distBall = length(vWorldPos - uBallPos);
+            float groundMask = smoothstep(0.90, 0.997, n.y) * (1.0 - smoothstep(0.12, 1.3, abs(vWorldPos.y)));
+            float largeField = fbm(vWorldPos.xz * 0.07 + vec2(2.0, 3.0));
+            float fineField = fbm(vWorldPos.xz * 0.23 + vec2(9.0, 7.0));
+            float horizonField = fbm(vWorldPos.xz * 0.025 + vec2(12.0, 2.0));
+            float horizonJitter = (horizonField - 0.5) * 1.1;
+            float horizonLevel = 2.7 + horizonJitter * 0.55;
+            float skyMask = smoothstep(horizonLevel - 0.9, horizonLevel + 4.2, vWorldPos.y);
+            float ballMask = 1.0 - smoothstep(0.21, 0.36, distBall);
+            float objectMask = (1.0 - groundMask) * (1.0 - skyMask);
+
+            // Temperatures (degC-like model)
+            float tSky = 18.1 + (fbm(vWorldPos.xz * 0.03 + vec2(5.0, 11.0)) - 0.5) * 0.7;
+            float tGround = 24.1
+                + (largeField - 0.5) * 1.15
+                + (fineField - 0.5) * 0.32;
+            float tObject = 22.7 + (fbm(vWorldPos.xy * 0.2 + vec2(8.0, 4.0)) - 0.5) * 0.55 + (1.0 - abs(n.y)) * 0.22;
+            vec3 ballDir = normalize(vWorldPos - uBallPos + vec3(0.001));
+            float ballLit = max(0.0, dot(ballDir, normalize(vec3(-0.35, 0.9, -0.22))));
+            float tBall = 26.2 + min(1.0, uForce * 0.03) * 2.0 + ballLit * 0.9 + (fbm(vWorldPos.xz * 1.2 + vec2(3.0, 2.0)) - 0.5) * 0.28;
+
+            float temp = 0.0;
+            temp += tSky * skyMask;
+            temp += tGround * groundMask;
+            temp += tObject * objectMask;
+            temp = mix(temp, tBall, ballMask);
+
+            // Force goal posts + net to render as white-hot in thermal mode
+            float goalXFill = 1.0 - smoothstep(3.8, 4.2, abs(vWorldPos.x));
+            float goalYRange = smoothstep(-0.05, 0.08, vWorldPos.y) * (1.0 - smoothstep(2.44, 2.62, vWorldPos.y));
+            float nearGoalPlane = 1.0 - smoothstep(0.10, 0.24, abs(vWorldPos.z));
+
+            float postDist = min(abs(vWorldPos.x - 3.66), abs(vWorldPos.x + 3.66));
+            float postMask = (1.0 - smoothstep(0.03, 0.11, postDist)) * goalYRange * nearGoalPlane;
+            float crossMask = (1.0 - smoothstep(0.03, 0.11, abs(vWorldPos.y - 2.44))) * goalXFill * nearGoalPlane;
+
+            float netDepth = smoothstep(0.0, 0.10, vWorldPos.z) * (1.0 - smoothstep(2.55, 2.75, vWorldPos.z));
+            float netMask = goalXFill * goalYRange * netDepth;
+
+            float goalHotMask = clamp((postMask + crossMask + netMask) * objectMask, 0.0, 1.0);
+            temp = mix(temp, 31.8, goalHotMask);
+
+            // Keep ball design visible in thermal: seam + panel contrast
+            float ballShell = length(vWorldPos - uBallPos);
+            float seamMask = smoothstep(0.2202, 0.2246, ballShell) * ballMask;
+            float seamEdge = clamp(length(fwidth(ballShell)) * 180.0, 0.0, 1.0) * seamMask;
+            float geomEdge = clamp(length(fwidth(n)) * 2.6, 0.0, 1.0) * ballMask;
+            float panelVar = (fbm(ballDir.xz * 9.5 + ballDir.y * 3.6) - 0.5) * 0.55;
+            temp += panelVar * ballMask;
+            temp -= seamMask * 1.15;
+            temp -= seamEdge * 0.45;
+            temp -= geomEdge * 0.3;
+
+            // Horizon transition: keep it present but break perfect banding
+            float horizonZone = exp(-abs(vWorldPos.y - horizonLevel) * 0.85) * (1.0 - ballMask);
+            float horizonNoise = (fbm(vWorldPos.xz * 0.06 + vec2(1.7, uTime * 0.03)) - 0.5) * 0.42;
+            temp += horizonNoise * horizonZone;
+            temp = mix(temp, mix(tGround, tSky, 0.42), horizonZone * 0.12);
+
+            // Subtle contact patch instead of symmetric halo ring
+            vec2 groundDelta = vec2(vWorldPos.x - uBallPos.x, vWorldPos.z - uBallPos.z);
+            float contactPatch = exp(-(groundDelta.x * groundDelta.x * 14.0 + groundDelta.y * groundDelta.y * 9.5));
+            float contactIrregular = 0.85 + (fbm(groundDelta * 2.8 + vec2(3.0, 7.0)) - 0.5) * 0.35;
+            temp += contactPatch * contactIrregular * groundMask * 0.16;
+
+            // AGC-like compression (tight scene window)
+            float center = 23.4;
+            float span = 7.8;
+            float norm = clamp((temp - (center - span * 0.5)) / span, 0.0, 1.0);
+            norm = mix(norm, smoothstep(0.0, 1.0, norm), 0.28);
+
+            // Sensor characteristics: quantization + grain
+            norm = floor(norm * 96.0) / 96.0;
+            float grain = (hash12(floor(gl_FragCoord.xy * 0.95) + vec2(uTime * 24.0, 17.0)) - 0.5) * 0.028;
+            float rowNoise = (hash12(vec2(0.0, floor(gl_FragCoord.y * 0.52) + uTime * 3.4)) - 0.5) * 0.012;
+            float colNoise = (hash12(vec2(floor(gl_FragCoord.x * 0.38) + uTime * 2.2, 0.0)) - 0.5) * 0.006;
+            float fixedPattern = (hash12(floor(gl_FragCoord.xy * 0.22) + vec2(31.0, 9.0)) - 0.5) * 0.009;
+            float temporalShimmer = (hash12(gl_FragCoord.xy * 0.17 + vec2(uTime * 12.0, uTime * 7.0)) - 0.5) * 0.006;
+            float sensorNoise = grain + rowNoise + colNoise + fixedPattern + temporalShimmer;
+            float ballNoiseScale = mix(1.0, 0.28, ballMask);
+            norm = clamp(norm + sensorNoise * ballNoiseScale, 0.0, 1.0);
+            float edgeSoft = pow(1.0 - max(0.0, dot(n, viewDir)), 1.3) * 0.035;
+            norm = clamp(norm - edgeSoft, 0.0, 1.0);
+            float farFlatten = smoothstep(24.0, 90.0, distCam);
+            norm = mix(norm, 0.5 + (norm - 0.5) * 0.75, 1.0 - farFlatten * 0.35);
+            norm = clamp(pow(norm, 1.03) * uStrength, 0.0, 1.0);
+
+            vec3 col = thermalPalette(norm);
+            gl_FragColor = vec4(col, 1.0);
+        }
+    `
+})
+
+const wireframeOverrideMaterial = new THREE.MeshBasicMaterial({
+    color: '#d3d2ff',
+    wireframe: true
+})
+
+let fluidOverlayEnabled = false
+let thermalResolutionApplied = false
+
+function applyVisualFilter() {
+    const s = debugParams.filterStrength
+    fluidOverlayEnabled = debugParams.visualFilter === 'fluidDynamics'
+
+    if (debugParams.visualFilter === 'thermal') {
+        scene.overrideMaterial = thermalOverrideMaterial
+        thermalUniforms.uStrength.value = 0.9 + s * 0.08
+        const c = 1.0 + (s - 1.0) * 0.16
+        const sat = 1.0 + (s - 1.0) * 0.10
+        canvas.style.filter = `contrast(${c}) saturate(${sat}) blur(0.8px)`
+        panel4Canvas.style.filter = `contrast(${c}) saturate(${sat}) blur(0.8px)`
+    } else if (debugParams.visualFilter === 'wireframe') {
+        scene.overrideMaterial = wireframeOverrideMaterial
+        canvas.style.filter = `contrast(${1.1 * s}) brightness(${1.02 * s})`
+        panel4Canvas.style.filter = 'none'
+    } else {
+        scene.overrideMaterial = null
+        let filter = 'none'
+        if (debugParams.visualFilter === 'highContrast') {
+            filter = `contrast(${1.15 * s}) saturate(${1.25 * s})`
+        } else if (debugParams.visualFilter === 'nightVision') {
+            filter = `grayscale(${0.15 * s}) sepia(${0.9 * s}) hue-rotate(${35 * s}deg) saturate(${1.8 * s}) contrast(${1.25 * s})`
+        } else if (debugParams.visualFilter === 'blueprint') {
+            filter = `grayscale(${0.2 * s}) hue-rotate(${185 * s}deg) saturate(${1.6 * s}) contrast(${1.2 * s})`
+        } else if (debugParams.visualFilter === 'fluidDynamics') {
+            filter = `contrast(${1.08 * s}) saturate(${1.18 * s})`
+        }
+        canvas.style.filter = filter
+        panel4Canvas.style.filter = 'none'
+    }
+}
 
 
 
@@ -163,6 +399,119 @@ spot.position.set(0, lineHeight, -11)
 fieldLines.add(spot)
 
 scene.add(fieldLines)
+
+/**
+ * Force Vector Overlay
+ */
+const vectorGroup = new THREE.Group()
+vectorGroup.visible = false
+scene.add(vectorGroup)
+
+function createVectorViz(color) {
+    const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 })
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, 0)
+    ])
+    const line = new THREE.Line(geometry, material)
+    const tip = new THREE.Mesh(
+        new THREE.SphereGeometry(0.045, 8, 8),
+        new THREE.MeshBasicMaterial({ color })
+    )
+    vectorGroup.add(line)
+    vectorGroup.add(tip)
+    return { line, tip }
+}
+
+const vectorVisuals = {
+    velocity: createVectorViz(0x4a9eff),
+    drag: createVectorViz(0xffd166),
+    magnus: createVectorViz(0xff6b6b),
+    gravity: createVectorViz(0xb084ff),
+    wind: createVectorViz(0x5be7c4)
+}
+
+function setVectorVisual(viz, origin, vec, visible) {
+    viz.line.visible = visible
+    viz.tip.visible = visible
+    if (!visible) return
+    const end = origin.clone().add(vec)
+    viz.line.geometry.setFromPoints([origin, end])
+    viz.tip.position.copy(end)
+}
+
+function updateForceVectors() {
+    vectorGroup.visible = debugParams.vectorOverlay && isKicking
+    vectorLegend.classList.toggle('visible', vectorGroup.visible)
+    if (!vectorGroup.visible) return
+
+    const origin = ballGroup.position.clone()
+    const speed = activeVelocityVec.length()
+    const velocityVec = activeVelocityVec.clone().multiplyScalar(0.06)
+    const dragVec = speed > 0.001
+        ? activeVelocityVec.clone().normalize().multiplyScalar(-Math.min(1.6, speed * speed * 0.003))
+        : new THREE.Vector3()
+    const magnusVec = new THREE.Vector3(Math.sign(activeCurveForce || 0.0001) * Math.min(1.3, Math.abs(activeLateralAccel) * 0.12), 0, 0)
+    const gravityVec = new THREE.Vector3(0, -0.9 * debugParams.gravity, 0)
+    const windVec = new THREE.Vector3(debugParams.windSpeed * 0.12, 0, 0)
+
+    setVectorVisual(vectorVisuals.velocity, origin, velocityVec, debugParams.showVelocityVector)
+    setVectorVisual(vectorVisuals.drag, origin, dragVec, debugParams.showDragVector)
+    setVectorVisual(vectorVisuals.magnus, origin, magnusVec, debugParams.showMagnusVector)
+    setVectorVisual(vectorVisuals.gravity, origin, gravityVec, debugParams.showGravityVector)
+    setVectorVisual(vectorVisuals.wind, origin, windVec, debugParams.showWindVector)
+}
+
+const fluidFlowGroup = new THREE.Group()
+fluidFlowGroup.visible = false
+scene.add(fluidFlowGroup)
+
+const fluidLines = []
+const fluidLineCount = 26
+const fluidLinePoints = 42
+for (let i = 0; i < fluidLineCount; i++) {
+    const positions = new Float32Array(fluidLinePoints * 3)
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    const mat = new THREE.LineBasicMaterial({ color: '#4bd5d9', transparent: true, opacity: 0.55 })
+    const line = new THREE.Line(geo, mat)
+    fluidLines.push({ line, positions })
+    fluidFlowGroup.add(line)
+}
+
+function updateFluidFlowOverlay(time) {
+    fluidFlowGroup.visible = fluidOverlayEnabled
+    if (!fluidFlowGroup.visible || !ballGroup) return
+
+    const bx = ballGroup.position.x
+    const bz = ballGroup.position.z
+    const swirl = Math.max(-1, Math.min(1, activeCurveForce * 0.035))
+
+    for (let i = 0; i < fluidLineCount; i++) {
+        const lane = i / (fluidLineCount - 1)
+        const baseX = -14 + lane * 28
+        const { line, positions } = fluidLines[i]
+        for (let p = 0; p < fluidLinePoints; p++) {
+            const t = p / (fluidLinePoints - 1)
+            const z = -25 + t * 31
+            const dx = baseX - bx
+            const dz = z - bz
+            const radial = Math.exp(-(dx * dx + dz * dz) / 16)
+            const curl = swirl * radial * (1.0 - t) * 9.5
+            const wake = Math.sin(time * 2.2 + t * 8 + i * 0.4) * radial * 0.35
+            const x = baseX + curl + wake
+            const y = 0.045 + radial * 0.11
+
+            const idx = p * 3
+            positions[idx] = x
+            positions[idx + 1] = y
+            positions[idx + 2] = z
+        }
+        line.geometry.attributes.position.needsUpdate = true
+    }
+}
+
+applyVisualFilter()
 
 /**
  * Goal
@@ -927,6 +1276,7 @@ const resizeObserver = new ResizeObserver(() => {
     camera.updateProjectionMatrix()
     renderer.setSize(sizes.width, sizes.height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    thermalResolutionApplied = ! (debugParams.visualFilter === 'thermal')
 })
 resizeObserver.observe(shooterPanel)
 
@@ -1018,6 +1368,234 @@ const custResizeObserver = new ResizeObserver(() => {
     custRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 })
 custResizeObserver.observe(custViewport)
+
+/**
+ * Panels 4 + 5 — Analytics
+ */
+const physicsHistory = []
+const maxPhysicsHistory = 24
+let latestFlightSeries = null
+
+const panel4Camera = new THREE.PerspectiveCamera(38, Math.max(1, panel4Panel.clientWidth) / Math.max(1, panel4Panel.clientHeight), 0.1, 220)
+panel4Camera.position.set(0, 18, -23)
+panel4Camera.lookAt(0, 0.8, -8)
+
+const panel4Renderer = new THREE.WebGLRenderer({ canvas: panel4Canvas, antialias: true, alpha: false })
+panel4Renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+panel4Renderer.setSize(panel4Panel.clientWidth || 1, panel4Panel.clientHeight || 1)
+
+function updateThermalResolution() {
+    const thermal = debugParams.visualFilter === 'thermal'
+    if (thermal === thermalResolutionApplied) return
+    thermalResolutionApplied = thermal
+
+    const dpr = Math.min(window.devicePixelRatio, 2)
+    const mainDpr = thermal ? Math.max(1, dpr * 0.72) : dpr
+    const panelDpr = thermal ? Math.max(1, dpr * 0.75) : dpr
+
+    renderer.setPixelRatio(mainDpr)
+    renderer.setSize(sizes.width, sizes.height)
+    panel4Renderer.setPixelRatio(panelDpr)
+    panel4Renderer.setSize(Math.max(1, panel4Panel.clientWidth), Math.max(1, panel4Panel.clientHeight))
+}
+panel4Canvas.style.transform = 'none'
+
+const panel4MaxTrail = 260
+const panel4TrailPoints = []
+const panel4TrailPositions = new Float32Array(panel4MaxTrail * 3)
+const panel4TrailGeometry = new THREE.BufferGeometry()
+panel4TrailGeometry.setAttribute('position', new THREE.BufferAttribute(panel4TrailPositions, 3))
+panel4TrailGeometry.setDrawRange(0, 0)
+const panel4TrailMaterial = new THREE.LineBasicMaterial({ color: '#66d1ff', transparent: true, opacity: 0.95 })
+const panel4TrailLine = new THREE.Line(panel4TrailGeometry, panel4TrailMaterial)
+panel4TrailLine.visible = false
+scene.add(panel4TrailLine)
+let panel4TrailFade = 0
+
+function clearTrail() {
+    panel4TrailPoints.length = 0
+    panel4TrailGeometry.setDrawRange(0, 0)
+    panel4TrailFade = 0
+}
+
+function pushTrailPoint() {
+    panel4TrailFade = 1
+    panel4TrailMaterial.opacity = 0.95
+    const p = { x: ballGroup.position.x, z: ballGroup.position.z }
+    const last = panel4TrailPoints[panel4TrailPoints.length - 1]
+    if (last && Math.hypot(p.x - last.x, p.z - last.z) < 0.045) return
+    panel4TrailPoints.push(p)
+    if (panel4TrailPoints.length > panel4MaxTrail) panel4TrailPoints.shift()
+
+    const count = panel4TrailPoints.length
+    for (let i = 0; i < count; i++) {
+        const idx = i * 3
+        panel4TrailPositions[idx] = panel4TrailPoints[i].x
+        panel4TrailPositions[idx + 1] = 0.06
+        panel4TrailPositions[idx + 2] = panel4TrailPoints[i].z
+    }
+    panel4TrailGeometry.attributes.position.needsUpdate = true
+    panel4TrailGeometry.setDrawRange(0, count)
+}
+
+function fadeTrail() {
+    if (panel4TrailPoints.length === 0) return
+    panel4TrailFade = Math.max(0, panel4TrailFade - 0.018)
+    panel4TrailMaterial.opacity = 0.95 * panel4TrailFade
+    if (panel4TrailFade <= 0.01) {
+        clearTrail()
+    }
+}
+
+function renderBirdseye() {
+    const prevGridVisible = gridHelper.visible
+    const prevFieldLines = fieldLines.visible
+    const prevBackWall = backWall.visible
+    const prevLeftWall = leftWall.visible
+    const prevRightWall = rightWall.visible
+    gridHelper.visible = false
+    fieldLines.visible = false
+    backWall.visible = false
+    leftWall.visible = false
+    rightWall.visible = false
+    panel4TrailLine.visible = panel4TrailPoints.length > 1
+    panel4Camera.lookAt(0, 0.8, -8)
+    panel4Renderer.render(scene, panel4Camera)
+    panel4TrailLine.visible = false
+    gridHelper.visible = prevGridVisible
+    fieldLines.visible = prevFieldLines
+    backWall.visible = prevBackWall
+    leftWall.visible = prevLeftWall
+    rightWall.visible = prevRightWall
+}
+
+let panel4LastRenderTime = 0
+function renderBirdseyeThrottled(nowSeconds) {
+    const moving = isKicking || isDragging
+    const minDelta = moving ? 1 / 45 : 1 / 12
+    if (nowSeconds - panel4LastRenderTime < minDelta) return
+    panel4LastRenderTime = nowSeconds
+    renderBirdseye()
+}
+
+const panel5Ctx = panel5Canvas.getContext('2d')
+
+const metricsEls = {
+    power: document.getElementById('metric-power'),
+    curve: document.getElementById('metric-curve'),
+    spin: document.getElementById('metric-spin'),
+    target: document.getElementById('metric-target')
+}
+
+function resizeDataPanels() {
+    const dpr = Math.min(window.devicePixelRatio, 2)
+
+    const w4 = Math.max(1, panel4Panel.clientWidth)
+    const h4 = Math.max(1, panel4Panel.clientHeight)
+    panel4Camera.aspect = w4 / h4
+    panel4Camera.updateProjectionMatrix()
+    panel4Renderer.setPixelRatio(dpr)
+    panel4Renderer.setSize(w4, h4)
+    thermalResolutionApplied = ! (debugParams.visualFilter === 'thermal')
+
+    const w5 = panel5Panel.clientWidth
+    const h5 = panel5Panel.clientHeight
+    panel5Canvas.width = Math.max(1, Math.floor(w5 * dpr))
+    panel5Canvas.height = Math.max(1, Math.floor(h5 * dpr))
+    panel5Ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+
+const dataPanelResizeObserver = new ResizeObserver(() => {
+    resizeDataPanels()
+    renderBirdseye()
+    drawFlightGraph()
+})
+dataPanelResizeObserver.observe(panel4Panel)
+dataPanelResizeObserver.observe(panel5Panel)
+resizeDataPanels()
+
+function estimateCd(speed) {
+    return 0.43 - 0.21 / (1 + Math.exp(-(speed - 14) / 2.2)) + 0.05 / (1 + Math.exp(-(speed - 28) / 3))
+}
+
+function estimateCl(spinParam) {
+    return Math.min(0.34, 0.62 * spinParam)
+}
+
+function recordPhysicsSample(sample) {
+    physicsHistory.push(sample)
+    if (physicsHistory.length > maxPhysicsHistory) physicsHistory.shift()
+
+    metricsEls.power.textContent = `${sample.peakSpeed.toFixed(1)} m/s`
+    metricsEls.curve.textContent = sample.avgCd.toFixed(3)
+    metricsEls.spin.textContent = sample.maxCl.toFixed(3)
+    metricsEls.target.textContent = `${Math.round(sample.reynolds / 1000)}k`
+
+    renderBirdseye()
+    drawFlightGraph()
+}
+
+function drawFlightGraph() {
+    const w = panel5Panel.clientWidth
+    const h = panel5Panel.clientHeight
+    panel5Ctx.clearRect(0, 0, w, h)
+    panel5Ctx.fillStyle = '#090909'
+    panel5Ctx.fillRect(0, 0, w, h)
+
+    const left = 18
+    const right = w - 18
+    const top = 74
+    const bottom = h - 34
+
+    panel5Ctx.strokeStyle = '#1d1d1d'
+    panel5Ctx.lineWidth = 1
+    panel5Ctx.beginPath()
+    panel5Ctx.moveTo(left, bottom)
+    panel5Ctx.lineTo(right, bottom)
+    panel5Ctx.moveTo(left, top)
+    panel5Ctx.lineTo(left, bottom)
+    panel5Ctx.stroke()
+
+    if (!latestFlightSeries || latestFlightSeries.t.length < 2) {
+        panel5Ctx.fillStyle = '#4f4f4f'
+        panel5Ctx.font = '12px sans-serif'
+        panel5Ctx.fillText('Kick to populate flight dynamics', left, top + 18)
+        return
+    }
+
+    const n = latestFlightSeries.t.length
+    const maxSpeed = Math.max(...latestFlightSeries.speed, 1)
+    const maxHeight = Math.max(...latestFlightSeries.height, 1)
+    const maxLat = Math.max(...latestFlightSeries.lateralAccel.map(v => Math.abs(v)), 0.1)
+
+    const drawSeries = (arr, color, mapFn) => {
+        panel5Ctx.strokeStyle = color
+        panel5Ctx.lineWidth = 2
+        panel5Ctx.beginPath()
+        for (let i = 0; i < n; i++) {
+            const x = left + latestFlightSeries.t[i] * (right - left)
+            const y = mapFn(arr[i], i)
+            if (i === 0) panel5Ctx.moveTo(x, y)
+            else panel5Ctx.lineTo(x, y)
+        }
+        panel5Ctx.stroke()
+    }
+
+    drawSeries(latestFlightSeries.speed, '#4aa3ff', (v) => bottom - (v / maxSpeed) * (bottom - top))
+    drawSeries(latestFlightSeries.height, '#80f0a5', (v) => bottom - (v / maxHeight) * (bottom - top))
+    drawSeries(latestFlightSeries.lateralAccel, '#ff8a4a', (v) => bottom - ((v + maxLat) / (maxLat * 2)) * (bottom - top))
+
+    panel5Ctx.fillStyle = '#6a6a6a'
+    panel5Ctx.font = '10px sans-serif'
+    panel5Ctx.fillText('Speed', w - 154, h - 12)
+    panel5Ctx.fillStyle = '#ff8a4a'
+    panel5Ctx.fillText('Lat Acc', w - 108, h - 12)
+    panel5Ctx.fillStyle = '#80f0a5'
+    panel5Ctx.fillText('Height', w - 64, h - 12)
+}
+
+renderBirdseye()
+drawFlightGraph()
 
 let custViewMode = 'ball'
 
@@ -1441,6 +2019,9 @@ function updateTrailRibbon(points) {
  */
 let isKicking = false
 let isDragging = false
+let activeCurveForce = 0
+const activeVelocityVec = new THREE.Vector3(0, 0, 0)
+let activeLateralAccel = 0
 let flickStart = { x: 0, y: 0, time: 0 }
 const dragPoints = [] // screen-space points captured during drag
 
@@ -1503,6 +2084,7 @@ canvas.addEventListener('pointerup', onPointerUp)
  */
 function kick(power, aimX, curve) {
     isKicking = true
+    clearTrail()
 
     const design = BALL_DESIGNS[ballConfig.design]
     const effectiveRandomness = Math.max(0, debugParams.randomness + design.randomnessBonus)
@@ -1519,6 +2101,7 @@ function kick(power, aimX, curve) {
     const targetZ = 1 + finalPower * 2
 
     const curveStrength = curve * goalWidth * 1.84 * debugParams.curveIntensity * design.drag
+    activeCurveForce = curveStrength
     const wind = debugParams.windSpeed
     const steps = 60
     const pathX = []
@@ -1540,6 +2123,73 @@ function kick(power, aimX, curve) {
         pathY.push(Math.max(ballRadius, y))
     }
 
+    const dt = duration / steps
+    const velSamples = []
+    const accXSamples = []
+    const speedSeries = []
+    const heightSeries = []
+    const lateralSeries = []
+    const dragSeries = []
+    const magnusSeries = []
+    const gravitySeries = []
+    const windSeries = []
+
+    for (let i = 0; i <= steps; i++) {
+        const prevI = Math.max(0, i - 1)
+        const nextI = Math.min(steps, i + 1)
+        const vx = (pathX[nextI] - pathX[prevI]) / ((nextI - prevI || 1) * dt)
+        const vy = (pathY[nextI] - pathY[prevI]) / ((nextI - prevI || 1) * dt)
+        const vz = (pathZ[nextI] - pathZ[prevI]) / ((nextI - prevI || 1) * dt)
+        velSamples.push(new THREE.Vector3(vx, vy, vz))
+
+        const ax = (pathX[nextI] - 2 * pathX[i] + pathX[prevI]) / Math.max(dt * dt, 1e-4)
+        accXSamples.push(ax)
+
+        const speedMag = Math.sqrt(vx * vx + vy * vy + vz * vz)
+        speedSeries.push(speedMag)
+        heightSeries.push(pathY[i])
+        lateralSeries.push(ax)
+        dragSeries.push(speedMag * speedMag * 0.003)
+        magnusSeries.push(Math.abs(ax))
+        gravitySeries.push(9.81 * debugParams.gravity)
+        windSeries.push(Math.abs(debugParams.windSpeed) * 0.35)
+    }
+
+    latestFlightSeries = {
+        t: Array.from({ length: steps + 1 }, (_, i) => i / steps),
+        speed: speedSeries,
+        height: heightSeries,
+        lateralAccel: lateralSeries,
+        heat: {
+            velocity: speedSeries,
+            drag: dragSeries,
+            magnus: magnusSeries,
+            gravity: gravitySeries,
+            wind: windSeries
+        }
+    }
+
+    const meanSpeed = speedSeries.reduce((a, b) => a + b, 0) / speedSeries.length
+    const peakSpeed = Math.max(...speedSeries)
+    const ballDiameter = 0.22
+    const airDensity = 1.225
+    const dynamicViscosity = 1.81e-5
+    const reynolds = (airDensity * peakSpeed * ballDiameter) / dynamicViscosity
+    const avgCd = estimateCd(meanSpeed)
+
+    const omega = (Math.PI * 4 * finalPower * debugParams.spinMultiplier) / duration
+    const spinParam = (Math.abs(omega) * (ballDiameter / 2)) / Math.max(1, meanSpeed)
+    const maxCl = estimateCl(spinParam)
+
+    recordPhysicsSample({
+        meanSpeed,
+        peakSpeed,
+        avgCd,
+        maxCl,
+        spinParam,
+        reynolds
+    })
+
     const progress = { t: 0 }
     const tl = gsap.timeline({
         onComplete: () => resetBall()
@@ -1554,6 +2204,9 @@ function kick(power, aimX, curve) {
             ballGroup.position.x = pathX[idx]
             ballGroup.position.y = pathY[idx]
             ballGroup.position.z = pathZ[idx]
+            activeVelocityVec.copy(velSamples[idx])
+            activeLateralAccel = accXSamples[idx]
+            updateForceVectors()
         }
     }, 0)
 
@@ -1568,9 +2221,15 @@ function kick(power, aimX, curve) {
 
 function resetBall() {
     gsap.delayedCall(debugParams.resetDelay, () => {
+        isKicking = false
+        activeCurveForce = 0
+        activeLateralAccel = 0
+        activeVelocityVec.set(0, 0, 0)
+        updateForceVectors()
+
         const resetTl = gsap.timeline({
             onComplete: () => {
-                isKicking = false
+                renderBirdseye()
             }
         })
 
@@ -1587,11 +2246,9 @@ function resetBall() {
 /**
  * Animate
  */
-const clock = new THREE.Clock()
-
 const tick = () => {
-    const elapsedTime = clock.getElapsedTime()
-
+    const elapsedTime = performance.now() * 0.001
+    updateThermalResolution()
     // Update OrbitControls if enabled
     if (controls.enabled) {
         controls.update()
@@ -1600,10 +2257,40 @@ const tick = () => {
         camera.lookAt(0, 1, 0)
     }
 
+    if (scene.overrideMaterial === thermalOverrideMaterial) {
+        thermalUniforms.uTime.value = elapsedTime
+        thermalUniforms.uBallPos.value.copy(ballGroup.position)
+        const forceMag = activeVelocityVec.length() + Math.abs(activeLateralAccel) + Math.abs(debugParams.windSpeed) + debugParams.gravity * 2
+        thermalUniforms.uForce.value = forceMag
+    }
+
+    const isThermalView = debugParams.visualFilter === 'thermal'
+    const prevGridVisible = gridHelper.visible
+    const prevFieldLinesVisible = fieldLines.visible
+    if (isThermalView) {
+        gridHelper.visible = false
+        fieldLines.visible = false
+    }
     renderer.render(scene, camera)
+    if (isThermalView) {
+        gridHelper.visible = prevGridVisible
+        fieldLines.visible = prevFieldLinesVisible
+    }
+
+    updateFluidFlowOverlay(elapsedTime)
 
     custControls.update()
     custRenderer.render(custScene, custCamera)
+
+    if (isKicking) {
+        pushTrailPoint()
+    } else {
+        fadeTrail()
+    }
+
+    renderBirdseye()
+
+    updateForceVectors()
 
     window.requestAnimationFrame(tick)
 }
