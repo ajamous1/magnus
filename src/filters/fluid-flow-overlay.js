@@ -1,13 +1,23 @@
 import * as THREE from 'three'
+import { Line2 } from 'three/examples/jsm/lines/Line2.js'
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
 
-const SEED_COLS = 7
-const SEED_ROWS = 6
+const SEED_COLS = 15
+const SEED_ROWS = 11
 const STREAMLINE_COUNT = SEED_COLS * SEED_ROWS
-const STREAMLINE_POINTS = 92
-const CORE_SEED_RATIO = 0.76
-const OUTER_LENGTH_RATIO = 0.58
+const STREAMLINE_POINTS = 160
 const STEP_SCALE_MIN = 0.42
 const STEP_SCALE_MAX = 1.6
+
+// Fixed tunnel geometry — world-space constants, never change
+// Wide enough that lines fill the full screen edge-to-edge in perspective
+const TUNNEL_SEED_Z = -16        // far upstream, behind camera (-17), ensures lines start off-screen
+const TUNNEL_X_MIN = -12         // wide to fill screen edges in perspective
+const TUNNEL_X_MAX = 12
+const TUNNEL_Y_MIN = -1.5        // below ground for bottom-of-screen coverage
+const TUNNEL_Y_MAX = 4.5         // above goal height with margin
+const TUNNEL_FLOW_LENGTH = 22    // from seed plane well past the goal
 
 const DEBUG_ARROW_COLS = 5
 const DEBUG_ARROW_ROWS = 3
@@ -16,10 +26,17 @@ const DEBUG_ARROW_COUNT = DEBUG_ARROW_COLS * DEBUG_ARROW_ROWS * DEBUG_ARROW_DEPT
 
 const LOG_INTERVAL_SECONDS = 0.9
 
-const COLOR_LOW = new THREE.Color('#1954c9')
-const COLOR_MID = new THREE.Color('#22bfa9')
-const COLOR_HIGH = new THREE.Color('#ecd65d')
-const COLOR_PEAK = new THREE.Color('#ef5f2e')
+// COMSOL-style thermal rainbow palette: deep blue → cyan → green → yellow → red
+const COLOR_STOPS = [
+    new THREE.Color('#0000cc'),  // 0.0  deep blue — stagnation / very slow
+    new THREE.Color('#0066ff'),  // 0.15 blue
+    new THREE.Color('#00cccc'),  // 0.3  cyan
+    new THREE.Color('#00cc44'),  // 0.45 green
+    new THREE.Color('#aacc00'),  // 0.6  yellow-green
+    new THREE.Color('#ffcc00'),  // 0.75 yellow
+    new THREE.Color('#ff6600'),  // 0.88 orange
+    new THREE.Color('#cc0000')   // 1.0  deep red — peak speed
+]
 const COLOR_DEBUG = new THREE.Color()
 
 const TUNNEL_DIR = new THREE.Vector3(0, 0, 1)
@@ -31,31 +48,17 @@ function clamp01(v) {
 
 function writeFlowColor(colors, pointIndex, normalizedSpeed) {
     const u = clamp01(normalizedSpeed)
-    let r
-    let g
-    let b
-
-    if (u < 0.36) {
-        const k = u / 0.36
-        r = COLOR_LOW.r + (COLOR_MID.r - COLOR_LOW.r) * k
-        g = COLOR_LOW.g + (COLOR_MID.g - COLOR_LOW.g) * k
-        b = COLOR_LOW.b + (COLOR_MID.b - COLOR_LOW.b) * k
-    } else if (u < 0.72) {
-        const k = (u - 0.36) / 0.36
-        r = COLOR_MID.r + (COLOR_HIGH.r - COLOR_MID.r) * k
-        g = COLOR_MID.g + (COLOR_HIGH.g - COLOR_MID.g) * k
-        b = COLOR_MID.b + (COLOR_HIGH.b - COLOR_MID.b) * k
-    } else {
-        const k = (u - 0.72) / 0.28
-        r = COLOR_HIGH.r + (COLOR_PEAK.r - COLOR_HIGH.r) * k
-        g = COLOR_HIGH.g + (COLOR_PEAK.g - COLOR_HIGH.g) * k
-        b = COLOR_HIGH.b + (COLOR_PEAK.b - COLOR_HIGH.b) * k
-    }
+    // Multi-stop COMSOL-style rainbow interpolation
+    const scaled = u * (COLOR_STOPS.length - 1)
+    const lo = Math.min(Math.floor(scaled), COLOR_STOPS.length - 2)
+    const k = scaled - lo
+    const c0 = COLOR_STOPS[lo]
+    const c1 = COLOR_STOPS[lo + 1]
 
     const idx = pointIndex * 3
-    colors[idx] = r
-    colors[idx + 1] = g
-    colors[idx + 2] = b
+    colors[idx] = c0.r + (c1.r - c0.r) * k
+    colors[idx + 1] = c0.g + (c1.g - c0.g) * k
+    colors[idx + 2] = c0.b + (c1.b - c0.b) * k
 }
 
 function signedCenterBias(v, exponent) {
@@ -91,20 +94,26 @@ export function createFluidFlowOverlay({
     scene.add(flowGroup)
 
     const streamlines = []
+    const lineResolution = new THREE.Vector2(window.innerWidth, window.innerHeight)
     for (let i = 0; i < STREAMLINE_COUNT; i++) {
         const positions = new Float32Array(STREAMLINE_POINTS * 3)
         const colors = new Float32Array(STREAMLINE_POINTS * 3)
-        const geometry = new THREE.BufferGeometry()
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
 
-        const material = new THREE.LineBasicMaterial({
+        const geometry = new LineGeometry()
+        geometry.setPositions(positions)
+        geometry.setColors(colors)
+
+        const material = new LineMaterial({
             transparent: true,
-            opacity: 0.74,
-            vertexColors: true
+            opacity: 0.85,
+            vertexColors: true,
+            linewidth: 2.5,       // actual pixel width — works on all platforms
+            resolution: lineResolution,
+            worldUnits: false
         })
 
-        const line = new THREE.Line(geometry, material)
+        const line = new Line2(geometry, material)
+        line.computeLineDistances()
         line.frustumCulled = false
         flowGroup.add(line)
 
@@ -147,6 +156,7 @@ export function createFluidFlowOverlay({
     const tmpRight = new THREE.Vector3()
     const tmpUp = new THREE.Vector3()
     const tmpAdvectDir = new THREE.Vector3()
+    const tmpWakeDir = new THREE.Vector3()
 
     const tmpPos = new THREE.Vector3()
     const tmpMid = new THREE.Vector3()
@@ -209,112 +219,151 @@ export function createFluidFlowOverlay({
         const ny = ry * invD
         const nz = rz * invD
 
-        const freeX = tmpFlowDir.x * freestream
-        const freeY = tmpFlowDir.y * freestream
-        const freeZ = tmpFlowDir.z * freestream
+        // --- Freestream: stable tunnel direction ---
+        const freeX = TUNNEL_DIR.x * freestream
+        const freeY = TUNNEL_DIR.y * freestream
+        const freeZ = TUNNEL_DIR.z * freestream
         const windX = tmpWind.x
         const windY = tmpWind.y
         const windZ = tmpWind.z
 
+        // Combined undisturbed flow
+        const U0x = freeX + windX
+        const U0y = freeY + windY
+        const U0z = freeZ + windZ
+
+        // --- Potential flow: dipole around sphere (ALWAYS active) ---
+        // This is the analytical solution for inviscid flow past a sphere.
+        // The ball always deflects the freestream — like smoke hitting a ball.
+        // motionFactor only enhances the dynamic effects (spin, wake boost).
         let deflectX = 0
         let deflectY = 0
         let deflectZ = 0
 
-        const baseX = freeX + windX
-        const baseY = freeY + windY
-        const baseZ = freeZ + windZ
-        const baseMag = Math.sqrt(baseX * baseX + baseY * baseY + baseZ * baseZ)
+        const motionFactor = params.motionFactor
+        // Effective radius: base always present, motion adds modest boost
+        const R = ballRadius * (deflectStrength + motionFactor * 0.7)
+        if (d > ballRadius * 0.3) {
+            const R3 = R * R * R
+            const d3 = d * d * d
+            const dipoleScale = R3 / (2 * d3)
 
-        const influenceSigma = Math.max(ballRadius * 2, influenceRadius * 0.5)
-        const influence = Math.exp(-Math.pow((d - ballRadius) / Math.max(1e-6, influenceSigma), 2))
+            const U0dotN = U0x * nx + U0y * ny + U0z * nz
 
-        const normalComp = baseX * nx + baseY * ny + baseZ * nz
-        let tangentX = baseX - nx * normalComp
-        let tangentY = baseY - ny * normalComp
-        let tangentZ = baseZ - nz * normalComp
-        const tangentLen = Math.sqrt(tangentX * tangentX + tangentY * tangentY + tangentZ * tangentZ)
-        if (tangentLen > 1e-6) {
-            const invT = 1 / tangentLen
-            tangentX *= invT
-            tangentY *= invT
-            tangentZ *= invT
-        } else {
-            tangentX = tmpRight.x
-            tangentY = tmpRight.y
-            tangentZ = tmpRight.z
+            deflectX = (3 * U0dotN * nx - U0x) * dipoleScale
+            deflectY = (3 * U0dotN * ny - U0y) * dipoleScale
+            deflectZ = (3 * U0dotN * nz - U0z) * dipoleScale
+
+            // Clamp dipole perturbation to max 80% of undisturbed flow magnitude
+            // This prevents near-field explosion while preserving natural far-field falloff
+            const U0mag = Math.sqrt(U0x * U0x + U0y * U0y + U0z * U0z)
+            const deflectMag = Math.sqrt(deflectX * deflectX + deflectY * deflectY + deflectZ * deflectZ)
+            const maxDeflect = U0mag * 0.8
+            if (deflectMag > maxDeflect && deflectMag > 1e-6) {
+                const scale = maxDeflect / deflectMag
+                deflectX *= scale
+                deflectY *= scale
+                deflectZ *= scale
+            }
         }
 
-        const deflectMag = (0.85 * baseMag + 0.22) * deflectStrength * influence
-        deflectX += tangentX * deflectMag
-        deflectY += tangentY * deflectMag
-        deflectZ += tangentZ * deflectMag
-
+        // --- Magnus effect: spin-induced lateral force (enhanced by motion) ---
         let spinX = 0
         let spinY = 0
         let spinZ = 0
-        const spinCrossX = spinOmega.y * rz - spinOmega.z * ry
-        const spinCrossY = spinOmega.z * rx - spinOmega.x * rz
-        const spinCrossZ = spinOmega.x * ry - spinOmega.y * rx
-        const spinFalloff = Math.exp(-Math.pow((d - ballRadius) / Math.max(1e-4, ballRadius * 2.8), 2))
-        spinX = spinCrossX * spinStrength * spinFalloff * 0.05
-        spinY = spinCrossY * spinStrength * spinFalloff * 0.05
-        spinZ = spinCrossZ * spinStrength * spinFalloff * 0.05
+        if (motionFactor > 0.01) {
+            const spinCrossX = spinOmega.y * rz - spinOmega.z * ry
+            const spinCrossY = spinOmega.z * rx - spinOmega.x * rz
+            const spinCrossZ = spinOmega.x * ry - spinOmega.y * rx
+            const spinFalloff = Math.exp(-Math.pow((d - ballRadius) / Math.max(1e-4, ballRadius * 6.0), 2))
+            spinX = spinCrossX * spinStrength * spinFalloff * 0.06 * motionFactor
+            spinY = spinCrossY * spinStrength * spinFalloff * 0.06 * motionFactor
+            spinZ = spinCrossZ * spinStrength * spinFalloff * 0.06 * motionFactor
+        }
 
+        // --- Wake: velocity deficit behind the ball (ALWAYS present, boosted by motion) ---
+        // Even at idle, the freestream creates a wake behind the sphere.
         let wakeX = 0
         let wakeY = 0
         let wakeZ = 0
-        const proj = rx * tmpAdvectDir.x + ry * tmpAdvectDir.y + rz * tmpAdvectDir.z
+        // Wake direction: use tunnel dir at idle, advect dir when moving
+        const wdX = motionFactor > 0.1 ? tmpAdvectDir.x : TUNNEL_DIR.x
+        const wdY = motionFactor > 0.1 ? tmpAdvectDir.y : TUNNEL_DIR.y
+        const wdZ = motionFactor > 0.1 ? tmpAdvectDir.z : TUNNEL_DIR.z
+        const proj = rx * wdX + ry * wdY + rz * wdZ
         if (proj > 0) {
-            const axisX = rx - tmpAdvectDir.x * proj
-            const axisY = ry - tmpAdvectDir.y * proj
-            const axisZ = rz - tmpAdvectDir.z * proj
+            const axisX = rx - wdX * proj
+            const axisY = ry - wdY * proj
+            const axisZ = rz - wdZ * proj
             const axisR2 = axisX * axisX + axisY * axisY + axisZ * axisZ
-            const wakeRadius = ballRadius * (1.6 + proj * 0.2)
+            const wakeRadius = ballRadius * (2.0 + proj * 0.15)
+            // Wake strength: base always present, motion boosts it
+            const wakeMultiplier = 0.6 + motionFactor * 0.4
             const wakeCore = Math.exp(-axisR2 / (wakeRadius * wakeRadius + 1e-6)) * Math.exp(-proj / Math.max(1e-4, wakeLength))
-            const wakeSheath = Math.exp(-Math.pow((Math.sqrt(axisR2 + 1e-9) - wakeRadius * 0.9) / Math.max(1e-4, ballRadius * 1.05), 2))
+            const wakeSheath = Math.exp(-Math.pow((Math.sqrt(axisR2 + 1e-9) - wakeRadius * 0.9) / Math.max(1e-4, ballRadius * 1.4), 2))
 
-            const drop = freestream * wakeStrength * wakeCore * 1.14
-            wakeX -= tmpAdvectDir.x * drop
-            wakeY -= tmpAdvectDir.y * drop
-            wakeZ -= tmpAdvectDir.z * drop
+            // Velocity deficit in wake — persistent even at rest
+            const drop = freestream * wakeStrength * wakeCore * 1.5 * wakeMultiplier
+            wakeX -= wdX * drop
+            wakeY -= wdY * drop
+            wakeZ -= wdZ * drop
 
+            // Radial spreading in wake
             tmpAxisRadial.set(axisX, axisY, axisZ)
             if (tmpAxisRadial.lengthSq() > 1e-8) {
                 tmpAxisRadial.normalize()
-                const spread = (0.1 * wakeCore + 0.035 * wakeSheath) * (1 - Math.exp(-proj * 0.085))
+                const spread = (0.18 * wakeCore + 0.06 * wakeSheath) * (1 - Math.exp(-proj * 0.1)) * wakeMultiplier
                 wakeX += tmpAxisRadial.x * spread
                 wakeY += tmpAxisRadial.y * spread
                 wakeZ += tmpAxisRadial.z * spread
             }
 
-            tmpWakeSpinBias.copy(spinOmega).cross(tmpAdvectDir)
-            if (tmpWakeSpinBias.lengthSq() > 1e-8) {
-                tmpWakeSpinBias.normalize()
-                const bias = 0.18 * wakeCore
-                wakeX += tmpWakeSpinBias.x * bias
-                wakeY += tmpWakeSpinBias.y * bias
-                wakeZ += tmpWakeSpinBias.z * bias
+            // Spin bias in wake (only when moving)
+            if (motionFactor > 0.01) {
+                tmpWakeSpinBias.copy(spinOmega).cross(tmpAdvectDir)
+                if (tmpWakeSpinBias.lengthSq() > 1e-8) {
+                    tmpWakeSpinBias.normalize()
+                    const bias = 0.3 * wakeCore * motionFactor
+                    wakeX += tmpWakeSpinBias.x * bias
+                    wakeY += tmpWakeSpinBias.y * bias
+                    wakeZ += tmpWakeSpinBias.z * bias
+                }
             }
 
-            const wakeSway = Math.sin(params.timeSeconds * 2.0 + proj * 0.82) * wakeCore * 0.015
+            // Subtle wake unsteadiness
+            const wakeSway = Math.sin(params.timeSeconds * 2.0 + proj * 0.82) * wakeCore * 0.02
             wakeX += tmpRight.x * wakeSway
             wakeY += tmpRight.y * wakeSway
             wakeZ += tmpRight.z * wakeSway
         }
 
-        let totalX = freeX + windX + deflectX + spinX + wakeX
-        let totalY = freeY + windY + deflectY + spinY + wakeY
-        let totalZ = freeZ + windZ + deflectZ + spinZ + wakeZ
+        // Clamp wake perturbation to max 60% of freestream
+        const wakeMag = Math.sqrt(wakeX * wakeX + wakeY * wakeY + wakeZ * wakeZ)
+        const maxWake = freestream * 0.6
+        if (wakeMag > maxWake && wakeMag > 1e-6) {
+            const wScale = maxWake / wakeMag
+            wakeX *= wScale
+            wakeY *= wScale
+            wakeZ *= wScale
+        }
 
-        if (d < ballRadius * 0.995) {
-            const push = (ballRadius * 1.02 - d) * 7.8
+        // --- Total velocity: freestream + perturbations ---
+        // The freestream ALWAYS dominates. Perturbations are clamped additions.
+        let totalX = U0x + deflectX + spinX + wakeX
+        let totalY = U0y + deflectY + spinY + wakeY
+        let totalZ = U0z + deflectZ + spinZ + wakeZ
+
+        // Hard-sphere exclusion: gently push streamlines out of the ball
+        if (d < ballRadius * 1.05) {
+            const push = (ballRadius * 1.08 - d) * 8
             totalX += nx * push
             totalY += ny * push
             totalZ += nz * push
         }
 
+        // Speed clamp
         const speed = Math.sqrt(totalX * totalX + totalY * totalY + totalZ * totalZ)
-        const maxSpeed = freestream * 1.5 + tmpWind.length() * 0.72 + 0.82
+        const maxSpeed = freestream * 2.5 + tmpWind.length() * 0.72 + 1.0
         if (speed > maxSpeed) {
             const inv = maxSpeed / speed
             totalX *= inv
@@ -392,6 +441,9 @@ export function createFluidFlowOverlay({
     }
 
     function updateFluidFlowOverlay(timeSeconds) {
+        // Keep Line2 resolution in sync with viewport
+        lineResolution.set(window.innerWidth, window.innerHeight)
+
         const fluidMode = visualFilters.getFluidOverlay()
         const tunnelMode = visualFilters.getWindTunnelOverlay()
         const overlayEnabled = fluidMode || tunnelMode
@@ -423,13 +475,21 @@ export function createFluidFlowOverlay({
         if (tmpVelocityOpp.lengthSq() < 1e-7) tmpVelocityOpp.copy(TUNNEL_DIR).multiplyScalar(-1)
         tmpVelocityOpp.normalize().multiplyScalar(-1)
 
-        const motionBlend = clamp01((velocityMag - 0.08) / 8)
-        tmpFlowDir.copy(TUNNEL_DIR).lerp(tmpVelocityOpp, motionBlend).normalize()
+        // Global flow direction: stays mostly aligned with tunnel direction
+        // Only a very slight tilt from ball velocity to keep upstream stable
+        const globalTilt = clamp01((velocityMag - 0.08) / 8) * 0.08
+        tmpFlowDir.copy(TUNNEL_DIR).lerp(tmpVelocityOpp, globalTilt).normalize()
 
-        tmpRight.set(0, 1, 0).cross(tmpFlowDir)
+        // Seed coordinate frame built from pure TUNNEL_DIR — perfectly stable,
+        // never tilted by ball velocity. This keeps the seed grid orientation locked.
+        tmpRight.set(0, 1, 0).cross(TUNNEL_DIR)
         if (tmpRight.lengthSq() < 1e-6) tmpRight.set(1, 0, 0)
         tmpRight.normalize()
-        tmpUp.copy(tmpFlowDir).cross(tmpRight).normalize()
+        tmpUp.copy(TUNNEL_DIR).cross(tmpRight).normalize()
+
+        // Wake direction: follows ball velocity for wake/disturbance calculations
+        const wakeBlend = clamp01((velocityMag - 0.08) / 6) * 0.72
+        tmpWakeDir.copy(TUNNEL_DIR).lerp(tmpVelocityOpp, wakeBlend).normalize()
 
         resolveWind(tmpWind)
 
@@ -437,22 +497,27 @@ export function createFluidFlowOverlay({
         const windCap = freestream * 0.36 + 0.14
         if (tmpWind.length() > windCap) tmpWind.setLength(windCap)
 
-        tmpAdvectDir.copy(tmpFlowDir)
+        // Advect direction for wake: driven by ball velocity (via tmpWakeDir), not global flow
+        tmpAdvectDir.copy(tmpWakeDir)
         if (tmpWind.lengthSq() > 1e-8) tmpAdvectDir.addScaledVector(tmpWind, 0.2 / Math.max(0.35, freestream))
         if (tmpAdvectDir.lengthSq() < 1e-8) tmpAdvectDir.copy(tmpFlowDir)
         tmpAdvectDir.normalize()
 
-        const stepSize = tunnelMode ? 0.1 : 0.09
-        const seedOffset = tunnelMode ? 4.2 : 3.8
-        const seedWidth = tunnelMode ? 3.7 : 3.3
-        const seedHeight = tunnelMode ? 2.4 : 2.7
-        const convectivePeriod = stepSize * 7
+        // Step size tuned so 160 points × ~0.15 effective step ≈ 24 units of line length
+        // This spans the full tunnel from seed plane (Z=-16) well past the goal
+        const stepSize = tunnelMode ? 0.14 : 0.13
 
-        const deflectStrength = 1.82 * (0.92 + (strength - 0.5) * 0.52)
-        const spinStrength = (tunnelMode ? 0.36 : 0.86) * (0.72 + (strength - 0.5) * 0.34)
-        const wakeStrength = (tunnelMode ? 1.26 : 1.62) * (0.94 + (strength - 0.5) * 0.52)
-        const influenceRadius = ballRadius * 5.0
-        const wakeLength = ballRadius * (11.2 + 2.4 * strength)
+        // Convective phase: slow cycling that shifts seed Z slightly, creating a flowing feel
+        // Period covers a few units so lines appear to drift forward continuously
+        const convectivePeriod = 3.5
+
+        // deflectStrength = effective radius multiplier for dipole (R = ballRadius * deflectStrength)
+        // 1.8 means R³/d³ = 2.9× at surface — visible deflection without overwhelming the freestream
+        const deflectStrength = (tunnelMode ? 1.6 : 1.8) * (0.92 + (strength - 0.5) * 0.3)
+        const spinStrength = (tunnelMode ? 0.5 : 1.0) * (0.72 + (strength - 0.5) * 0.34)
+        const wakeStrength = (tunnelMode ? 1.4 : 2.0) * (0.94 + (strength - 0.5) * 0.4)
+        const influenceRadius = ballRadius * 8.0
+        const wakeLength = ballRadius * (18 + 3.0 * strength)
 
         if (velocityMag < 0.12 && tunnelMode) {
             spinOmega.set(0, 0, 0)
@@ -464,6 +529,10 @@ export function createFluidFlowOverlay({
             )
         }
 
+        // motionFactor: 0 when ball is idle, ramps to 1 when ball is moving fast
+        // This keeps the field as clean parallel lines at rest
+        const motionFactor = clamp01(velocityMag / 3.0)
+
         const params = {
             bx,
             by,
@@ -474,11 +543,14 @@ export function createFluidFlowOverlay({
             wakeStrength,
             influenceRadius,
             wakeLength,
-            timeSeconds
+            timeSeconds,
+            motionFactor
         }
         const speedReference = Math.max(0.8, freestream + tmpWind.length() * 0.35)
 
-        const speedForColor = Math.max(0.5, freestream * 1.22 + tmpWind.length() * 0.72)
+        // Color scale: freestream speed maps to ~0.55 on the palette (green/yellow),
+        // so acceleration around the ball shows orange/red, and wake shows blue
+        const speedForColor = Math.max(0.5, freestream * 1.8 + tmpWind.length() * 0.72)
 
         if (diagnosticsEnabled && debugParams.flowDebugArrows) {
             updateDebugArrows(params, speedForColor)
@@ -493,7 +565,6 @@ export function createFluidFlowOverlay({
             wakeInfluenceMesh.visible = false
         }
 
-        const coreCount = Math.floor(STREAMLINE_COUNT * CORE_SEED_RATIO)
         const shouldLogNow = diagnosticsEnabled && (debugParams.flowDebugLogs || debugParams.flowDebugStreamlines)
             && timeSeconds - lastLogTime > LOG_INTERVAL_SECONDS
 
@@ -510,57 +581,43 @@ export function createFluidFlowOverlay({
 
         const streamlineDebug = []
         const monitorA = 0
-        const monitorB = Math.max(0, Math.min(STREAMLINE_COUNT - 1, Math.floor(coreCount * 0.5)))
-        const monitorC = Math.max(0, coreCount - 1)
+        const monitorB = Math.max(0, Math.min(STREAMLINE_COUNT - 1, Math.floor(STREAMLINE_COUNT * 0.5)))
+        const monitorC = Math.max(0, STREAMLINE_COUNT - 1)
 
         for (let i = 0; i < STREAMLINE_COUNT; i++) {
             const { line, positions, colors, phaseOffset } = streamlines[i]
-            const isCoreSeed = i < coreCount
-            line.material.opacity = isCoreSeed ? (tunnelMode ? 0.84 : 0.76) : (tunnelMode ? 0.44 : 0.4)
+            // Uniform opacity and width — COMSOL-style clean, visible streamlines
+            line.material.opacity = tunnelMode ? 0.88 : 0.82
+            line.material.linewidth = tunnelMode ? 3.0 : 2.5
+            line.material.resolution = lineResolution
 
-            const phase = (timeSeconds * freestream * 0.44 + phaseOffset) % convectivePeriod
-            const seedCenterX = bx - tmpFlowDir.x * seedOffset + tmpFlowDir.x * phase
-            const seedCenterY = by - tmpFlowDir.y * seedOffset + tmpFlowDir.y * phase
-            const seedCenterZ = bz - tmpFlowDir.z * seedOffset + tmpFlowDir.z * phase
-
+            // FIXED world-space seed positions — perfectly uniform rectangular grid
+            // Every line is at a fixed (X, Y) in the tunnel cross-section
             const ix = i % SEED_COLS
             const iy = Math.floor(i / SEED_COLS)
             const u = SEED_COLS === 1 ? 0.5 : ix / (SEED_COLS - 1)
             const v = SEED_ROWS === 1 ? 0.5 : iy / (SEED_ROWS - 1)
 
-            tmpPos.set(seedCenterX, seedCenterY, seedCenterZ)
-            if (isCoreSeed) {
-                const uc = signedCenterBias(u, 2.35)
-                const vc = signedCenterBias(v, 2.25)
-                const lanePhase = Math.sin(timeSeconds * 0.9 + i * 0.45 + phaseOffset * 1.5) * 0.03
-                tmpPos.addScaledVector(tmpRight, (uc + lanePhase) * seedWidth * 0.5)
-                tmpPos.addScaledVector(tmpUp, (vc - lanePhase * 0.45) * seedHeight * 0.5)
-            } else {
-                const uc = signedCenterBias(u, 1.08)
-                const vc = signedCenterBias(v, 1.08)
-                tmpPos.addScaledVector(tmpRight, uc * seedWidth * 0.86)
-                tmpPos.addScaledVector(tmpUp, vc * seedHeight * 0.86)
-            }
+            // Evenly spaced X and Y — uniform rectangular grid, no bias or randomness
+            const seedX = lerp(TUNNEL_X_MIN, TUNNEL_X_MAX, u)
+            const seedY = lerp(TUNNEL_Y_MIN, TUNNEL_Y_MAX, v)
 
-            let prevDx = tmpFlowDir.x
-            let prevDy = tmpFlowDir.y
-            let prevDz = tmpFlowDir.z
+            // Z: fixed upstream plane with slow phase cycling for flow animation
+            const phase = (timeSeconds * freestream * 0.32 + phaseOffset) % convectivePeriod
+            const seedZ = TUNNEL_SEED_Z + phase
+
+            tmpPos.set(seedX, seedY, seedZ)
+
+            // Initial streamline direction: pure tunnel direction
+            let prevDx = TUNNEL_DIR.x
+            let prevDy = TUNNEL_DIR.y
+            let prevDz = TUNNEL_DIR.z
             let maxTurnDeg = 0
             let sharpFlipCount = 0
             const sampledSteps = []
 
-            const lineMaxSteps = isCoreSeed ? STREAMLINE_POINTS : Math.floor(STREAMLINE_POINTS * OUTER_LENGTH_RATIO)
+            // All lines get full length — uniform, no short outer lines
             for (let step = 0; step < STREAMLINE_POINTS; step++) {
-                if (step >= lineMaxSteps) {
-                    for (let q = step; q < STREAMLINE_POINTS; q++) {
-                        const qIdx = q * 3
-                        positions[qIdx] = tmpPos.x
-                        positions[qIdx + 1] = tmpPos.y
-                        positions[qIdx + 2] = tmpPos.z
-                        writeFlowColor(colors, q, 0.06)
-                    }
-                    break
-                }
 
                 const speedMag = evaluateField(tmpPos.x, tmpPos.y, tmpPos.z, params, tmpVel, null)
 
@@ -581,13 +638,10 @@ export function createFluidFlowOverlay({
                     break
                 }
 
-                const dxBall = tmpPos.x - bx
-                const dyBall = tmpPos.y - by
-                const dzBall = tmpPos.z - bz
-                const dist2 = dxBall * dxBall + dyBall * dyBall + dzBall * dzBall
-                const axisProj = dxBall * tmpAdvectDir.x + dyBall * tmpAdvectDir.y + dzBall * tmpAdvectDir.z
-                const offAxis2 = Math.max(0, dist2 - axisProj * axisProj)
-                if (axisProj > 22 || axisProj < -11 || offAxis2 > 58 || tmpPos.y < -0.45 || tmpPos.y > 7.5) {
+                // World-space tunnel escape boundaries — completely fixed, no ball coupling
+                if (tmpPos.z > TUNNEL_SEED_Z + TUNNEL_FLOW_LENGTH + 2 || tmpPos.z < TUNNEL_SEED_Z - 2 ||
+                    tmpPos.x < TUNNEL_X_MIN - 3 || tmpPos.x > TUNNEL_X_MAX + 3 ||
+                    tmpPos.y < -0.3 || tmpPos.y > TUNNEL_Y_MAX + 3) {
                     for (let q = step + 1; q < STREAMLINE_POINTS; q++) {
                         const qIdx = q * 3
                         positions[qIdx] = tmpPos.x
@@ -650,16 +704,20 @@ export function createFluidFlowOverlay({
                 })
             }
 
-            line.geometry.attributes.position.needsUpdate = true
-            line.geometry.attributes.color.needsUpdate = true
+            // Update Line2 geometry with new positions and colors
+            line.geometry.setPositions(positions)
+            line.geometry.setColors(colors)
+            line.computeLineDistances()
         }
 
         if (shouldLogNow) {
             const samplePoints = [
                 { label: 'upstream', along: -2.8, side: 0, up: 0 },
+                { label: 'upstreamHigh', along: -3.5, side: 0, up: 2.0 },
                 { label: 'nearSurface', along: -0.95, side: 0.55, up: 0.2 },
                 { label: 'offCenter', along: -0.2, side: 1.35, up: 0.35 },
                 { label: 'wake', along: 4.8, side: 0.25, up: 0.1 },
+                { label: 'farWake', along: 8.0, side: 0, up: 0 },
                 { label: 'farField', along: 3.2, side: 5.4, up: 1.2 }
             ]
 
@@ -743,15 +801,23 @@ export function createFluidFlowOverlay({
                 console.table([ratios])
                 console.table([
                     {
-                        seedMode: `core=${coreCount}, outer=${STREAMLINE_COUNT - coreCount}`,
-                        seedWidth: Number(seedWidth.toFixed(2)),
-                        seedHeight: Number(seedHeight.toFixed(2)),
-                        seedOffset: Number(seedOffset.toFixed(2)),
+                        seedMode: `uniform ${SEED_COLS}x${SEED_ROWS}=${STREAMLINE_COUNT}`,
+                        tunnelSeedZ: TUNNEL_SEED_Z,
+                        tunnelX: `[${TUNNEL_X_MIN}, ${TUNNEL_X_MAX}]`,
+                        tunnelY: `[${TUNNEL_Y_MIN}, ${TUNNEL_Y_MAX}]`,
                         influenceRadius: Number(influenceRadius.toFixed(3)),
                         wakeLength: Number(wakeLength.toFixed(3))
                     }
                 ])
                 console.groupEnd()
+            }
+
+            if (debugParams.flowDebugLogs) {
+                const wakeDot = tmpWakeDir.dot(TUNNEL_DIR)
+                console.log(
+                    `[CFD] tunnel: seedZ=${TUNNEL_SEED_Z}, X=[${TUNNEL_X_MIN},${TUNNEL_X_MAX}], Y=[${TUNNEL_Y_MIN},${TUNNEL_Y_MAX}], ` +
+                    `wakeDir·tunnel=${wakeDot.toFixed(4)}, ball=(${bx.toFixed(2)}, ${by.toFixed(2)}, ${bz.toFixed(2)})`
+                )
             }
 
             if (debugParams.flowDebugStreamlines && streamlineDebug.length) {
