@@ -2,7 +2,7 @@ import GUI from 'lil-gui'
 
 /**
  * @param {HTMLElement} container
- * @param {ReturnType<import('./debugParams.js').createDebugParams>} debugParams
+ * @param {ReturnType<import('./debug-params.js').createDebugParams>} debugParams
  * @param {object} hooks
  * @param {(enabled: boolean) => void} hooks.onOrbitControlsChange
  * @param {() => void} hooks.onVectorFolderChange
@@ -20,6 +20,10 @@ export function createDebugGui(container, debugParams, hooks) {
     const physicsFolder = gui.addFolder('Physics')
     physicsFolder.add(debugParams, 'gravity', 0.2, 3, 0.1).name('Gravity')
     physicsFolder.add(debugParams, 'windSpeed', -5, 5, 0.1).name('Wind')
+    physicsFolder.add(debugParams, 'windStrength', 0, 4, 0.05).name('Flow Wind')
+    physicsFolder.add(debugParams, 'windDirX', -1, 1, 0.05).name('Wind Dir X')
+    physicsFolder.add(debugParams, 'windDirY', -1, 1, 0.05).name('Wind Dir Y')
+    physicsFolder.add(debugParams, 'windDirZ', -1, 1, 0.05).name('Wind Dir Z')
     physicsFolder.add(debugParams, 'randomness', 0.0, 2, 0.1).name('Randomness')
 
     const settingsFolder = gui.addFolder('Settings')
@@ -41,6 +45,13 @@ export function createDebugGui(container, debugParams, hooks) {
     filtersFolder.add(debugParams, 'filterStrength', 0.5, 1.5, 0.05)
         .name('Filter Strength')
         .onChange(hooks.onVisualFilterChange)
+
+    const flowDebugFolder = gui.addFolder('Flow Debug')
+    flowDebugFolder.add(debugParams, 'flowDiagnostics').name('Enable Diagnostics')
+    flowDebugFolder.add(debugParams, 'flowDebugArrows').name('Vector Arrows')
+    flowDebugFolder.add(debugParams, 'flowDebugVolumes').name('Influence Volumes')
+    flowDebugFolder.add(debugParams, 'flowDebugLogs').name('Component Logs')
+    flowDebugFolder.add(debugParams, 'flowDebugStreamlines').name('Streamline Logs')
 
     window.addEventListener('keydown', (e) => {
         if (e.key === 'h' || e.key === 'H') gui._hidden ? gui.show() : gui.hide()

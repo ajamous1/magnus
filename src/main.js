@@ -3,31 +3,32 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
     ballConfig,
     buildBallMesh,
-    buildExplodedBall,
-    buildFlatLayout,
-    applyExplodeFactor,
     BALL_DESIGNS
 } from './balls/index.js'
-import { createVisualFilterController } from './filters/visual-filters.js'
-import { createDebugParams } from './debug/debugParams.js'
-import { createDebugGui } from './debug/createDebugGui.js'
-import { createPitchEnvironment } from './scene/pitchEnvironment.js'
-import { createGoal } from './scene/goal.js'
-import { createForceVectorOverlay } from './vectors/forceVectorOverlay.js'
-import { createFluidFlowOverlay } from './fluid/fluidFlowOverlay.js'
-import { createFlightAnalyticsPanels } from './analytics/flightAnalyticsPanels.js'
-import { createDragTrailRibbon } from './kick/dragTrailRibbon.js'
-import { createKickShot } from './kick/kickShot.js'
+import { createVisualFilterController, createFluidFlowOverlay } from './filters/index.js'
+import { createDebugParams } from './panels/panel-debug/debug-params.js'
+import { createDebugGui } from './panels/panel-debug/create-debug-gui.js'
+import { createPitchEnvironment } from './panels/panel-shooter/pitch-environment.js'
+import { createGoal } from './panels/panel-shooter/goal.js'
+import { createForceVectorOverlay } from './panels/panel-shooter/force-vector-overlay.js'
+import { createFlightAnalyticsPanels } from './panels/flight-analytics.js'
+import { createDragTrailRibbon } from './panels/panel-shooter/drag-trail-ribbon.js'
+import { createKickShot } from './panels/panel-shooter/kick-shot.js'
+import { createCustomizerPreview } from './panels/panel-customizer/customizer-preview.js'
 import { initBentoResize, initPanelFullscreen } from './ui/bentoGrid.js'
 
 const debugParams = createDebugParams()
 
 const canvas = document.querySelector('canvas.webgl')
 const shooterPanel = document.getElementById('panel-shooter')
-const panel4Canvas = document.querySelector('canvas.panel4-canvas')
-const panel4Panel = document.getElementById('panel-4')
-const panel5Canvas = document.querySelector('canvas.panel5-canvas')
-const panel5Panel = document.getElementById('panel-5')
+const birdseye = {
+    panel: document.getElementById('panel-birdseye'),
+    canvas: document.querySelector('canvas.birdseye-canvas')
+}
+const flightDynamics = {
+    panel: document.getElementById('panel-flight-dynamics'),
+    canvas: document.querySelector('canvas.flight-dynamics-canvas')
+}
 const vectorLegend = document.getElementById('vector-legend')
 
 const scene = new THREE.Scene()
@@ -36,7 +37,7 @@ scene.fog = new THREE.FogExp2('#000000', 0.015)
 
 const visualFilters = createVisualFilterController({
     mainCanvas: canvas,
-    panel4Canvas,
+    canvas: birdseye.canvas,
     debugParams
 })
 function applyVisualFilter() {
@@ -62,6 +63,9 @@ const ballStartPosition = { x: 0, y: ballRadius, z: penaltySpotZ }
 let ballGroup = buildBallMesh(ballConfig, ballRadius)
 ballGroup.position.set(ballStartPosition.x, ballStartPosition.y, ballStartPosition.z)
 scene.add(ballGroup)
+
+const getBallGroup = () => ballGroup
+const setBallGroup = (g) => { ballGroup = g }
 
 const sizes = {
     width: shooterPanel.clientWidth,
@@ -116,7 +120,7 @@ const { updateFluidFlowOverlay } = createFluidFlowOverlay({
     scene,
     visualFilters,
     debugParams,
-    getBallGroup: () => ballGroup,
+    getBallGroup,
     getFlowState: () => ({
         activeVelocityVec: kickPhysics.activeVelocityVec,
         activeCurveForce: kickPhysics.activeCurveForce,
@@ -139,11 +143,9 @@ const {
     backWall,
     leftWall,
     rightWall,
-    panel4Panel,
-    panel4Canvas,
-    panel5Panel,
-    panel5Canvas,
-    getBallGroup: () => ballGroup
+    birdseye,
+    flightDynamics,
+    getBallGroup
 })
 
 const { kick } = createKickShot({
@@ -154,7 +156,7 @@ const { kick } = createKickShot({
     ballRadius,
     goalWidth,
     sizes,
-    getBallGroup: () => ballGroup,
+    getBallGroup,
     flightAnalyticsState,
     recordPhysicsSample,
     updateForceVectors,
@@ -173,7 +175,7 @@ const {
     canvas
 })
 
-createDebugGui(document.getElementById('panel-3'), debugParams, {
+createDebugGui(document.getElementById('panel-debug'), debugParams, {
     onOrbitControlsChange: (v) => { controls.enabled = v },
     onVectorFolderChange: () => updateForceVectors(),
     onVisualFilterChange: () => applyVisualFilter()
@@ -181,140 +183,18 @@ createDebugGui(document.getElementById('panel-3'), debugParams, {
 
 applyVisualFilter()
 
-/**
- * Customizer preview
- */
-const custCanvas = document.querySelector('canvas.customizer-preview')
-const custViewport = document.querySelector('.customizer-viewport')
-const custScene = new THREE.Scene()
-custScene.background = new THREE.Color('#0a0a0a')
-
-const custAmbient = new THREE.AmbientLight(0xffffff, 1.5)
-custScene.add(custAmbient)
-const custKey = new THREE.DirectionalLight(0xffffff, 2.5)
-custKey.position.set(3, 4, 5)
-custScene.add(custKey)
-const custFill = new THREE.DirectionalLight(0xffffff, 0.8)
-custFill.position.set(-3, 2, -3)
-custScene.add(custFill)
-
 const previewRadius = 0.4
-let previewBall = buildBallMesh(ballConfig, previewRadius)
-custScene.add(previewBall)
-
-let custViewMode = 'ball'
-let custExplodeFactor = 0
-let custExplodePanels = []
-
-const custCamera = new THREE.PerspectiveCamera(
-    40,
-    custViewport.clientWidth / (custViewport.clientHeight || 1),
-    0.1, 50
-)
-custCamera.position.set(0, 0, 1.2)
-custCamera.lookAt(0, 0, 0)
-
-const custRenderer = new THREE.WebGLRenderer({ canvas: custCanvas, antialias: true })
-custRenderer.setSize(custViewport.clientWidth, custViewport.clientHeight)
-custRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-
-const custControls = new OrbitControls(custCamera, custCanvas)
-custControls.enableDamping = true
-custControls.enablePan = false
-custControls.autoRotate = true
-custControls.autoRotateSpeed = 2.0
-custControls.minDistance = 0.6
-custControls.maxDistance = 3.0
-
-{
-    let flatDragging = false
-    let flatLastX = 0
-    let flatLastY = 0
-    custCanvas.addEventListener('mousedown', e => {
-        if (custViewMode !== 'flat') return
-        flatDragging = true
-        flatLastX = e.clientX
-        flatLastY = e.clientY
-        e.stopPropagation()
-    })
-    window.addEventListener('mousemove', e => {
-        if (!flatDragging || custViewMode !== 'flat' || !previewBall) return
-        const dx = e.clientX - flatLastX
-        flatLastX = e.clientX
-        flatLastY = e.clientY
-        previewBall.rotation.z += dx * 0.01
-    })
-    window.addEventListener('mouseup', () => { flatDragging = false })
-    custCanvas.addEventListener('touchstart', e => {
-        if (custViewMode !== 'flat' || e.touches.length !== 1) return
-        flatDragging = true
-        flatLastX = e.touches[0].clientX
-        flatLastY = e.touches[0].clientY
-    }, { passive: true })
-    window.addEventListener('touchmove', e => {
-        if (!flatDragging || custViewMode !== 'flat' || !previewBall || e.touches.length !== 1) return
-        const dx = e.touches[0].clientX - flatLastX
-        previewBall.rotation.z += dx * 0.01
-        flatLastX = e.touches[0].clientX
-        flatLastY = e.touches[0].clientY
-    }, { passive: true })
-    window.addEventListener('touchend', () => { flatDragging = false })
-}
-
-const custResizeObserver = new ResizeObserver(() => {
-    const w = custViewport.clientWidth
-    const h = custViewport.clientHeight
-    if (w === 0 || h === 0) return
-    custCamera.aspect = w / h
-    custCamera.updateProjectionMatrix()
-    custRenderer.setSize(w, h)
-    custRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+const customizer = createCustomizerPreview({
+    mainScene: scene,
+    ballConfig,
+    ballRadius,
+    previewRadius,
+    getBallGroup,
+    setBallGroup
 })
-custResizeObserver.observe(custViewport)
-
-function updateBall() {
-    const pos = ballGroup.position.clone()
-    const rot = ballGroup.rotation.clone()
-    scene.remove(ballGroup)
-    ballGroup = buildBallMesh(ballConfig, ballRadius)
-    ballGroup.position.copy(pos)
-    ballGroup.rotation.copy(rot)
-    scene.add(ballGroup)
-
-    custScene.remove(previewBall)
-    if (custViewMode === 'flat') {
-        previewBall = buildFlatLayout(ballConfig)
-        custControls.autoRotate = false
-        custControls.enableRotate = false
-        custControls.enablePan = true
-        custControls.minPolarAngle = Math.PI / 2
-        custControls.maxPolarAngle = Math.PI / 2
-        custControls.minDistance = 1
-        custControls.maxDistance = 60
-        custCamera.position.set(0, 0, ballConfig.design === 'classic' ? 18 : 9)
-        custCamera.lookAt(0, 0, 0)
-    } else {
-        custExplodePanels = []
-        if (custExplodeFactor > 0) {
-            const result = buildExplodedBall(ballConfig, previewRadius)
-            previewBall = result.group
-            custExplodePanels = result.panels
-            applyExplodeFactor(custExplodePanels, custExplodeFactor)
-        } else {
-            previewBall = buildBallMesh(ballConfig, previewRadius)
-        }
-        custControls.autoRotate = true
-        custControls.enableRotate = true
-        custControls.enablePan = false
-        custControls.minPolarAngle = 0
-        custControls.maxPolarAngle = Math.PI
-        custControls.minDistance = 0.6
-        custControls.maxDistance = 3.0 + custExplodeFactor * 5.0
-        custCamera.position.set(0, 0, 1.2)
-        custCamera.lookAt(0, 0, 0)
-    }
-    custScene.add(previewBall)
-}
+const { updateBall, custScene, custCamera, custRenderer, custControls } = customizer
+customizer.wireCustomizerUi()
+customizer.wireExplodeSlider()
 
 /**
  * Flick → kick
@@ -411,55 +291,6 @@ const tick = () => {
 }
 
 tick()
-
-document.querySelectorAll('.design-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.design-btn').forEach(b => b.classList.remove('active'))
-        btn.classList.add('active')
-        ballConfig.design = btn.dataset.design
-        updateBall()
-    })
-})
-
-document.querySelectorAll('.view-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'))
-        btn.classList.add('active')
-        custViewMode = btn.dataset.view
-        updateBall()
-    })
-})
-
-document.getElementById('primary-color').addEventListener('input', (e) => {
-    ballConfig.primaryColor = e.target.value
-    updateBall()
-})
-
-document.getElementById('secondary-color').addEventListener('input', (e) => {
-    ballConfig.secondaryColor = e.target.value
-    updateBall()
-})
-
-{
-    const explodeSlider = document.getElementById('explode-slider')
-    const explodeVal = document.getElementById('explode-val')
-
-    explodeSlider.addEventListener('input', (e) => {
-        const prev = custExplodeFactor
-        custExplodeFactor = parseFloat(e.target.value)
-        explodeVal.textContent = Math.round(custExplodeFactor * 100) + '%'
-
-        if (custViewMode === 'flat') return
-
-        const crossedZero = (prev === 0) !== (custExplodeFactor === 0)
-        if (crossedZero) {
-            updateBall()
-        } else if (custExplodeFactor > 0 && custExplodePanels.length > 0) {
-            applyExplodeFactor(custExplodePanels, custExplodeFactor)
-        }
-        custControls.maxDistance = 3.0 + custExplodeFactor * 5.0
-    })
-}
 
 initBentoResize()
 initPanelFullscreen()

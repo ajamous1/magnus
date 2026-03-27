@@ -10,6 +10,10 @@ export function createDebugParams() {
         curveIntensity: 1.0,
         randomness: 1.0,
         windSpeed: 0,
+        windStrength: 0,
+        windDirX: 1,
+        windDirY: 0,
+        windDirZ: 0,
         gravity: 1.0,
         orbitControls: false,
         vectorOverlay: false,
@@ -19,6 +23,11 @@ export function createDebugParams() {
         showGravityVector: true,
         showWindVector: false,
         visualFilter: 'none',
-        filterStrength: 1.0
+        filterStrength: 1.0,
+        flowDiagnostics: false,
+        flowDebugArrows: false,
+        flowDebugVolumes: false,
+        flowDebugLogs: false,
+        flowDebugStreamlines: false
     }
 }

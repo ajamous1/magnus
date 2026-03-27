@@ -1,15 +1,15 @@
 /**
- * Debug panel "View Filter" — CSS filters on the main canvas (and panel 4 reset).
+ * Debug panel "View Filter" — CSS filters on the main canvas (birdseye canvas stays unfiltered).
  */
 
 /**
  * @param {Object} opts
- * @param {HTMLCanvasElement} opts.mainCanvas — main WebGL canvas
- * @param {HTMLCanvasElement} opts.panel4Canvas
+ * @param {HTMLCanvasElement} opts.mainCanvas — main WebGL canvas (shooter)
+ * @param {HTMLCanvasElement} opts.canvas — birdseye panel canvas (stays unfiltered; API symmetry with `panel` modules)
  * @param {{ visualFilter: string, filterStrength: number }} opts.debugParams — mutable
  * @returns {{ apply: () => void, getFluidOverlay: () => boolean, getWindTunnelOverlay: () => boolean }}
  */
-export function createVisualFilterController({ mainCanvas, panel4Canvas, debugParams }) {
+export function createVisualFilterController({ mainCanvas, canvas, debugParams }) {
     let fluidOverlayEnabled = false
     let windTunnelOverlayEnabled = false
 
@@ -25,7 +25,7 @@ export function createVisualFilterController({ mainCanvas, panel4Canvas, debugPa
         } else {
             mainCanvas.style.filter = 'none'
         }
-        panel4Canvas.style.filter = 'none'
+        canvas.style.filter = 'none'
     }
 
     return {

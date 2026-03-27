@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import gsap from 'gsap'
-import { estimateCd, estimateCl } from '../physics/flightEstimates.js'
+import { estimateCd, estimateCl } from './flight-estimates.js'
 
 /**
  * Kick animation + GSAP timeline; owns reset-after-kick timing.

@@ -54,17 +54,17 @@ body {
     flex-direction: column;
 }
 
-#panel-3,
-#panel-4,
-#panel-5 {
+#panel-debug,
+#panel-birdseye,
+#panel-flight-dynamics {
     flex: 1 0 0px;
 }
 
-#panel-3 {
+#panel-debug {
     overflow-y: auto;
 }
 
-#panel-3 > .lil-gui {
+#panel-debug > .lil-gui {
     width: 100%;
     --background-color: #0a0a0a;
 }
@@ -377,22 +377,22 @@ body {
     letter-spacing: 0.02em;
 }
 
-/* Panel 4 + 5 data views */
-.panel4-canvas {
+/* Birdseye + flight dynamics data views */
+.birdseye-canvas {
     display: block;
     width: 100%;
     height: 100%;
     outline: none;
 }
 
-.panel5-canvas {
+.flight-dynamics-canvas {
     display: block;
     width: 100%;
     height: 100%;
     outline: none;
 }
 
-.panel4-label {
+.birdseye-label {
     position: absolute;
     bottom: 10px;
     left: 0;
@@ -406,7 +406,7 @@ body {
     pointer-events: none;
 }
 
-.panel5-label {
+.flight-dynamics-label {
     position: absolute;
     bottom: 10px;
     left: 0;
@@ -420,7 +420,7 @@ body {
     pointer-events: none;
 }
 
-.panel5-stats {
+.flight-dynamics-stats {
     position: absolute;
     top: 12px;
     left: 12px;
@@ -431,7 +431,7 @@ body {
     pointer-events: none;
 }
 
-.panel5-stat {
+.flight-dynamics-stat {
     background: rgba(0, 0, 0, 0.45);
     border: 1px solid #1f1f1f;
     border-radius: 8px;
@@ -441,14 +441,14 @@ body {
     gap: 2px;
 }
 
-.panel5-stat span {
+.flight-dynamics-stat span {
     font-size: 9px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: #5b5b5b;
 }
 
-.panel5-stat strong {
+.flight-dynamics-stat strong {
     font-size: 12px;
     font-weight: 600;
     color: #bfbfbf;
@@ -456,7 +456,7 @@ body {
 }
 
 @media (max-width: 1320px) {
-    .panel5-stats {
+    .flight-dynamics-stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
