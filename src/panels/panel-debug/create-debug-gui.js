@@ -38,21 +38,6 @@ export function createDebugGui(container, debugParams, hooks) {
     vectorsFolder.add(debugParams, 'showGravityVector').name('Gravity').onChange(hooks.onVectorFolderChange)
     vectorsFolder.add(debugParams, 'showWindVector').name('Wind').onChange(hooks.onVectorFolderChange)
 
-    const filtersFolder = gui.addFolder('Filters')
-    filtersFolder.add(debugParams, 'visualFilter', ['none', 'fluidDynamics', 'windTunnel'])
-        .name('View Filter')
-        .onChange(hooks.onVisualFilterChange)
-    filtersFolder.add(debugParams, 'filterStrength', 0.5, 1.5, 0.05)
-        .name('Filter Strength')
-        .onChange(hooks.onVisualFilterChange)
-
-    const flowDebugFolder = gui.addFolder('Flow Debug')
-    flowDebugFolder.add(debugParams, 'flowDiagnostics').name('Enable Diagnostics')
-    flowDebugFolder.add(debugParams, 'flowDebugArrows').name('Vector Arrows')
-    flowDebugFolder.add(debugParams, 'flowDebugVolumes').name('Influence Volumes')
-    flowDebugFolder.add(debugParams, 'flowDebugLogs').name('Component Logs')
-    flowDebugFolder.add(debugParams, 'flowDebugStreamlines').name('Streamline Logs')
-
     window.addEventListener('keydown', (e) => {
         if (e.key === 'h' || e.key === 'H') gui._hidden ? gui.show() : gui.hide()
     })

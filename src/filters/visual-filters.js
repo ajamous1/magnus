@@ -18,13 +18,7 @@ export function createVisualFilterController({ mainCanvas, canvas, debugParams }
         fluidOverlayEnabled = debugParams.visualFilter === 'fluidDynamics'
         windTunnelOverlayEnabled = debugParams.visualFilter === 'windTunnel'
 
-        if (fluidOverlayEnabled) {
-            mainCanvas.style.filter = `contrast(${1.05 * s}) saturate(${1.12 * s})`
-        } else if (windTunnelOverlayEnabled) {
-            mainCanvas.style.filter = `contrast(${1.08 * s}) saturate(${1.05 * s}) brightness(${1.02 * s})`
-        } else {
-            mainCanvas.style.filter = 'none'
-        }
+        mainCanvas.style.filter = 'none'
         canvas.style.filter = 'none'
     }
 

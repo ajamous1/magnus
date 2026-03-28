@@ -84,8 +84,8 @@ export function buildExplodedBall(config, radius) {
                 const perp = new THREE.Vector3().crossVectors(rad, edDir).normalize()
                 const taper = Math.sin(Math.PI*t)
                 const raw = Math.sin(2*Math.PI*t)
-                const sharp = Math.sign(raw)*Math.pow(Math.abs(raw),0.45)
-                p.add(perp.multiplyScalar(0.50*sharp*taper))
+                const sharp = Math.sign(raw)*Math.pow(Math.abs(raw),0.35)
+                p.add(perp.multiplyScalar(0.72*sharp*taper))
                 p.normalize()
                 pts.push(p)
             }
@@ -98,51 +98,51 @@ export function buildExplodedBall(config, radius) {
             return curve[i].clone().lerp(curve[i+1], idx-i)
         }
 
-        const gridN = 24, rB = radius*0.9995
+        const rB = radius * 0.9995
         bFaces.forEach(fi => {
-            const bottom = scMap.get(`${fi[0]}-${fi[1]}`)
-            const rightC = scMap.get(`${fi[1]}-${fi[2]}`)
-            const topC   = scMap.get(`${fi[3]}-${fi[2]}`)
-            const leftC  = scMap.get(`${fi[0]}-${fi[3]}`)
-            const P00=bv[fi[0]], P10=bv[fi[1]], P11=bv[fi[2]], P01=bv[fi[3]]
+            // Build boundary loop from the 4 edge curves
+            const edgeCurves = [
+                scMap.get(`${fi[0]}-${fi[1]}`),
+                scMap.get(`${fi[1]}-${fi[2]}`),
+                scMap.get(`${fi[2]}-${fi[3]}`),
+                scMap.get(`${fi[3]}-${fi[0]}`)
+            ]
+            const boundary = []
+            for (const c of edgeCurves) for (let j = 0; j < c.length - 1; j++) boundary.push(c[j])
 
+            // Centroid pushed OUTWARD for convexity
+            let cx2 = 0, cy2 = 0, cz2 = 0
+            fi.forEach(i => { cx2 += bv[i].x; cy2 += bv[i].y; cz2 += bv[i].z })
+            const cl2 = Math.sqrt(cx2*cx2 + cy2*cy2 + cz2*cz2)
+            const centroidDir = new THREE.Vector3(cx2/cl2, cy2/cl2, cz2/cl2)
+            // Place center ON the sphere surface (not inside) — this makes fan triangles convex
+            const center = centroidDir.clone().multiplyScalar(rB)
+
+            // Fan triangulation + midpoint subdivision for smooth convex surface
+            // For each fan triangle, add a midpoint on the sphere to prevent flat facets
             const pos = []
-            for (let iv=0;iv<gridN;iv++) {
-                for (let iu=0;iu<gridN;iu++) {
-                    const corners = [[iu/gridN,iv/gridN],[(iu+1)/gridN,iv/gridN],
-                        [(iu+1)/gridN,(iv+1)/gridN],[iu/gridN,(iv+1)/gridN]]
-                    const vs = corners.map(([u,v]) => {
-                        const bu=sampleSC(bottom,u), tu=sampleSC(topC,u)
-                        const lv=sampleSC(leftC,v),  rv=sampleSC(rightC,v)
-                        return new THREE.Vector3(
-                            (1-v)*bu.x+v*tu.x+(1-u)*lv.x+u*rv.x
-                              -(1-u)*(1-v)*P00.x-u*(1-v)*P10.x-u*v*P11.x-(1-u)*v*P01.x,
-                            (1-v)*bu.y+v*tu.y+(1-u)*lv.y+u*rv.y
-                              -(1-u)*(1-v)*P00.y-u*(1-v)*P10.y-u*v*P11.y-(1-u)*v*P01.y,
-                            (1-v)*bu.z+v*tu.z+(1-u)*lv.z+u*rv.z
-                              -(1-u)*(1-v)*P00.z-u*(1-v)*P10.z-u*v*P11.z-(1-u)*v*P01.z
-                        ).normalize().multiplyScalar(rB)
-                    })
-                    pos.push(vs[0].x,vs[0].y,vs[0].z, vs[1].x,vs[1].y,vs[1].z, vs[2].x,vs[2].y,vs[2].z)
-                    pos.push(vs[0].x,vs[0].y,vs[0].z, vs[2].x,vs[2].y,vs[2].z, vs[3].x,vs[3].y,vs[3].z)
-                }
+            for (let j = 0; j < boundary.length; j++) {
+                const a = boundary[j].clone().multiplyScalar(rB)
+                const b = boundary[(j + 1) % boundary.length].clone().multiplyScalar(rB)
+                // Midpoints projected onto sphere for convexity
+                const midA = center.clone().add(a).multiplyScalar(0.5).normalize().multiplyScalar(rB)
+                const midB = center.clone().add(b).multiplyScalar(0.5).normalize().multiplyScalar(rB)
+                const midAB = a.clone().add(b).multiplyScalar(0.5).normalize().multiplyScalar(rB)
+                // 4 sub-triangles instead of 1 flat triangle
+                pos.push(center.x, center.y, center.z, midA.x, midA.y, midA.z, midB.x, midB.y, midB.z)
+                pos.push(midA.x, midA.y, midA.z, a.x, a.y, a.z, midAB.x, midAB.y, midAB.z)
+                pos.push(midB.x, midB.y, midB.z, midAB.x, midAB.y, midAB.z, b.x, b.y, b.z)
+                pos.push(midA.x, midA.y, midA.z, midAB.x, midAB.y, midAB.z, midB.x, midB.y, midB.z)
             }
             const geo = new THREE.BufferGeometry()
             geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
             geo.computeVertexNormals()
 
-            let cx2=0,cy2=0,cz2=0
-            fi.forEach(i => { cx2+=bv[i].x; cy2+=bv[i].y; cz2+=bv[i].z })
-            const cl2 = Math.sqrt(cx2*cx2+cy2*cy2+cz2*cz2)
-            const centroidDir = new THREE.Vector3(cx2/cl2, cy2/cl2, cz2/cl2)
-
             const pg = new THREE.Group()
             pg.add(new THREE.Mesh(geo, fillMat.clone()))
 
-            const bpts = []
-            const curves = [scMap.get(`${fi[0]}-${fi[1]}`), scMap.get(`${fi[1]}-${fi[2]}`),
-                scMap.get(`${fi[2]}-${fi[3]}`), scMap.get(`${fi[3]}-${fi[0]}`)]
-            for (const c of curves) for (const p of c) bpts.push(p.clone().multiplyScalar(radius*1.001))
+            // Border line from boundary (same points as fill, at slightly larger radius)
+            const bpts = boundary.map(p => p.clone().multiplyScalar(radius * 1.001))
             bpts.push(bpts[0].clone())
             pg.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(bpts), borderMat))
 
@@ -151,10 +151,85 @@ export function buildExplodedBall(config, radius) {
         })
 
     } else if (config.design === 'trionda') {
-        const cs = 1/Math.sqrt(3)
-        const tvo = [new THREE.Vector3(cs,cs,cs),new THREE.Vector3(cs,-cs,-cs),
-            new THREE.Vector3(-cs,cs,-cs),new THREE.Vector3(-cs,-cs,cs)]
-        ;[[1,2,3],[0,2,3],[0,1,3],[0,1,2]].forEach(fi => addPanel(fi.map(i => tvo[i])))
+        const cs = 1 / Math.sqrt(3)
+        const tv = [
+            new THREE.Vector3(cs, cs, cs), new THREE.Vector3(cs, -cs, -cs),
+            new THREE.Vector3(-cs, cs, -cs), new THREE.Vector3(-cs, -cs, cs)
+        ]
+        const tFaces = [[1,2,3],[0,2,3],[0,1,3],[0,1,2]]
+        const tEdges = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]]
+
+        // Trionda S-curve edge generation
+        const tSeg = 32
+        const tAmp = 0.58
+        const tScMap = new Map()
+        for (const [ai, bi] of tEdges) {
+            const a = tv[ai], b = tv[bi]
+            const omega = Math.acos(Math.min(1, a.dot(b))), sinO = Math.sin(omega)
+            const edDir = b.clone().sub(a).normalize()
+            const pts = []
+            for (let i = 0; i <= tSeg; i++) {
+                const t = i / tSeg
+                const p = a.clone().multiplyScalar(Math.sin((1 - t) * omega) / sinO)
+                    .add(b.clone().multiplyScalar(Math.sin(t * omega) / sinO))
+                const rad = p.clone().normalize()
+                const perp = new THREE.Vector3().crossVectors(rad, edDir).normalize()
+                const taper = 0.35 + 0.65 * Math.sin(Math.PI * t)
+                const raw = Math.sin(2 * Math.PI * t)
+                const sharp = Math.sign(raw) * Math.pow(Math.abs(raw), 0.7)
+                p.add(perp.multiplyScalar(tAmp * sharp * taper))
+                p.normalize()
+                pts.push(p)
+            }
+            tScMap.set(`${ai}-${bi}`, pts)
+            tScMap.set(`${bi}-${ai}`, [...pts].reverse())
+        }
+
+        const rT = radius * 0.9995
+        tFaces.forEach(fi => {
+            // Boundary from 3 edge curves
+            const edgeCurvesT = [
+                tScMap.get(`${fi[0]}-${fi[1]}`),
+                tScMap.get(`${fi[1]}-${fi[2]}`),
+                tScMap.get(`${fi[2]}-${fi[0]}`)
+            ]
+            const boundaryT = []
+            for (const c of edgeCurvesT) for (let j = 0; j < c.length - 1; j++) boundaryT.push(c[j])
+
+            // Centroid on sphere
+            let cx3 = 0, cy3 = 0, cz3 = 0
+            fi.forEach(i => { cx3 += tv[i].x; cy3 += tv[i].y; cz3 += tv[i].z })
+            const cl3 = Math.sqrt(cx3 * cx3 + cy3 * cy3 + cz3 * cz3)
+            const centroidDirT = new THREE.Vector3(cx3 / cl3, cy3 / cl3, cz3 / cl3)
+            const centerT = centroidDirT.clone().multiplyScalar(rT)
+
+            // Fan triangulation with midpoint subdivision for convexity
+            const posT = []
+            for (let j = 0; j < boundaryT.length; j++) {
+                const a2 = boundaryT[j].clone().multiplyScalar(rT)
+                const b2 = boundaryT[(j + 1) % boundaryT.length].clone().multiplyScalar(rT)
+                const midA = centerT.clone().add(a2).multiplyScalar(0.5).normalize().multiplyScalar(rT)
+                const midB = centerT.clone().add(b2).multiplyScalar(0.5).normalize().multiplyScalar(rT)
+                const midAB = a2.clone().add(b2).multiplyScalar(0.5).normalize().multiplyScalar(rT)
+                posT.push(centerT.x, centerT.y, centerT.z, midA.x, midA.y, midA.z, midB.x, midB.y, midB.z)
+                posT.push(midA.x, midA.y, midA.z, a2.x, a2.y, a2.z, midAB.x, midAB.y, midAB.z)
+                posT.push(midB.x, midB.y, midB.z, midAB.x, midAB.y, midAB.z, b2.x, b2.y, b2.z)
+                posT.push(midA.x, midA.y, midA.z, midAB.x, midAB.y, midAB.z, midB.x, midB.y, midB.z)
+            }
+            const geoT = new THREE.BufferGeometry()
+            geoT.setAttribute('position', new THREE.Float32BufferAttribute(posT, 3))
+            geoT.computeVertexNormals()
+
+            const pgT = new THREE.Group()
+            pgT.add(new THREE.Mesh(geoT, fillMat.clone()))
+
+            const bptsT = boundaryT.map(p => p.clone().multiplyScalar(radius * 1.001))
+            bptsT.push(bptsT[0].clone())
+            pgT.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(bptsT), borderMat))
+
+            group.add(pgT)
+            panels.push({ mesh: pgT, centroidDir: centroidDirT, baseRadius: radius })
+        })
     }
 
     return { group, panels }

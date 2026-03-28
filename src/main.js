@@ -260,6 +260,8 @@ const tick = () => {
         camera.lookAt(0, 1, 0)
     }
 
+    updateFluidFlowOverlay(elapsedTime)
+
     const isFlowView = visualFilters.getFluidOverlay() || visualFilters.getWindTunnelOverlay()
     const prevGridVisible = gridHelper.visible
     const prevFieldLinesVisible = fieldLines.visible
@@ -272,8 +274,6 @@ const tick = () => {
         gridHelper.visible = prevGridVisible
         fieldLines.visible = prevFieldLinesVisible
     }
-
-    updateFluidFlowOverlay(elapsedTime)
 
     custControls.update()
     custRenderer.render(custScene, custCamera)

@@ -8,7 +8,7 @@ export function addBrazucaFlatLayout(config, helpers) {
         [-cs,cs,cs],[-cs,cs,-cs],[-cs,-cs,cs],[-cs,-cs,-cs]
     ]
     const v3d = cv.map(v => new THREE.Vector3(v[0], v[1], v[2]))
-    const scale = 1.2
+    const scale = 1.9
     const faceDefs = [
         { id: 'F0', vIdxs: [0,1,3,2], nc: new THREE.Vector3(1,0,0)  },
         { id: 'F1', vIdxs: [4,6,7,5], nc: new THREE.Vector3(-1,0,0) },

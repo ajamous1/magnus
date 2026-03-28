@@ -5,7 +5,7 @@ export function addTriondaFlatLayout(config, helpers) {
     const cs = 1 / Math.sqrt(3)
     const tv = [[cs,cs,cs],[cs,-cs,-cs],[-cs,cs,-cs],[-cs,-cs,cs]]
     const v3d = tv.map(v => new THREE.Vector3(v[0], v[1], v[2]))
-    const scale = 1.5
+    const scale = 1.8
     const panelDefs = [
         { id: 'P0', vIdxs: [1,2,3] },
         { id: 'P1', vIdxs: [0,2,3] },
