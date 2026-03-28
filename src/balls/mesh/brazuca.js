@@ -1,60 +1,32 @@
 import * as THREE from 'three'
+import { BRAZUCA_VERTICES, BRAZUCA_EDGES, generateBrazucaEdgeCurves } from '../geometry/brazuca-geometry.js'
 
+/**
+ * Adds Brazuca-style stitching (seam tubes + joint spheres) to the ball mesh group.
+ * Uses the shared edge curves from brazuca-geometry.js so the seams match
+ * the exploded view and flat panel boundaries exactly.
+ */
 export function addBrazucaDesign(group, config, radius) {
-    const seamR = radius * 1.003
-    const tubeR = radius * 0.014
-    const seamMat = new THREE.MeshLambertMaterial({ color: config.secondaryColor })
+    const seamRadius = radius * 1.003
+    const tubeRadius = radius * 0.014
+    const seamMaterial = new THREE.MeshLambertMaterial({ color: config.secondaryColor })
 
-    // Use the EXACT same cube vertices and S-curve algorithm as exploded-ball.js
-    // so stitching matches panel boundaries perfectly
-    const cs = 1 / Math.sqrt(3)
-    const bv = [
-        new THREE.Vector3(cs, cs, cs),
-        new THREE.Vector3(cs, cs, -cs),
-        new THREE.Vector3(cs, -cs, cs),
-        new THREE.Vector3(cs, -cs, -cs),
-        new THREE.Vector3(-cs, cs, cs),
-        new THREE.Vector3(-cs, cs, -cs),
-        new THREE.Vector3(-cs, -cs, cs),
-        new THREE.Vector3(-cs, -cs, -cs)
-    ]
-    const ce = [
-        [0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7]
-    ]
+    const edgeCurves = generateBrazucaEdgeCurves()
 
-    // Generate edge curves with the same parameters as exploded-ball.js
-    // sCurveSeg=32, amp=0.50, power=0.45 — identical to panel edge generation
-    const sCurveSeg = 32
-    const amp = 0.72
-    for (const [ai, bi] of ce) {
-        const a = bv[ai], b = bv[bi]
-        const omega = Math.acos(Math.min(1, a.dot(b)))
-        const sinO = Math.sin(omega)
-        const edDir = b.clone().sub(a).normalize()
-
-        const pts = []
-        for (let i = 0; i <= sCurveSeg; i++) {
-            const t = i / sCurveSeg
-            const p = a.clone().multiplyScalar(Math.sin((1 - t) * omega) / sinO)
-                .add(b.clone().multiplyScalar(Math.sin(t * omega) / sinO))
-            const rad = p.clone().normalize()
-            const perp = new THREE.Vector3().crossVectors(rad, edDir).normalize()
-            const taper = Math.sin(Math.PI * t)
-            const raw = Math.sin(2 * Math.PI * t)
-            const sharp = Math.sign(raw) * Math.pow(Math.abs(raw), 0.35)
-            p.add(perp.multiplyScalar(amp * sharp * taper))
-            p.normalize().multiplyScalar(seamR)
-            pts.push(p)
-        }
-
-        const curve = new THREE.CatmullRomCurve3(pts, false)
-        group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 64, tubeR, 8, false), seamMat))
+    // Create a tube mesh along each S-curved edge
+    for (const [indexA, indexB] of BRAZUCA_EDGES) {
+        const curvePoints = edgeCurves.get(`${indexA}-${indexB}`)
+        const scaledPoints = curvePoints.map(p => p.clone().multiplyScalar(seamRadius))
+        const curve = new THREE.CatmullRomCurve3(scaledPoints, false)
+        const tubeGeometry = new THREE.TubeGeometry(curve, 64, tubeRadius, 8, false)
+        group.add(new THREE.Mesh(tubeGeometry, seamMaterial))
     }
 
-    const jointGeo = new THREE.SphereGeometry(tubeR * 1.2, 8, 8)
-    for (const v of bv) {
-        const joint = new THREE.Mesh(jointGeo, seamMat)
-        joint.position.copy(v).normalize().multiplyScalar(seamR)
+    // Joint spheres at each vertex to smooth the seam connections
+    const jointGeometry = new THREE.SphereGeometry(tubeRadius * 1.2, 8, 8)
+    for (const vertex of BRAZUCA_VERTICES) {
+        const joint = new THREE.Mesh(jointGeometry, seamMaterial)
+        joint.position.copy(vertex).normalize().multiplyScalar(seamRadius)
         group.add(joint)
     }
 }
