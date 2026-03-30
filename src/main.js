@@ -158,7 +158,7 @@ const {
     getBallGroup
 })
 
-const { kick } = createKickShot({
+const { kick, cancelKick } = createKickShot({
     BALL_DESIGNS,
     ballConfig,
     debugParams,
@@ -316,7 +316,8 @@ const customizer = createCustomizerPreview({
     getBallGroup,
     setBallGroup,
     buildMainBall,
-    onBallChanged: rebuildSpinBall
+    onBallChanged: rebuildSpinBall,
+    cancelKick
 })
 const { updateBall, custScene, custCamera, custRenderer, custControls } = customizer
 customizer.wireCustomizerUi()

@@ -19,7 +19,8 @@ export function createCustomizerPreview({
     getBallGroup,
     setBallGroup,
     buildMainBall,
-    onBallChanged
+    onBallChanged,
+    cancelKick
 }) {
     const panelRoot = document.getElementById('panel-customizer')
     const zoomStateLabel = document.getElementById('zoom-state-label')

@@ -23,7 +23,13 @@ export function createKickShot({
     renderBirdseye,
     kickPhysics
 }) {
+    let activeTimeline = null
+    let activeDelayedCall = null
+
     function kick(power, aimX, curve) {
+        // Kill any in-progress kick
+        cancelKick()
+
         kickPhysics.isKicking = true
         clearTrail()
 
@@ -131,11 +137,22 @@ export function createKickShot({
             reynolds
         })
 
+        // Pre-compute target rotations as deltas
+        const rotDeltaX = -Math.PI * 4 * finalPower * debugParams.spinMultiplier
+        const rotDeltaY = curve * Math.PI * 2 * debugParams.spinMultiplier
+        const rotDeltaZ = finalX * 0.5 * debugParams.spinMultiplier
+        const startRotX = getBallGroup().rotation.x
+        const startRotY = getBallGroup().rotation.y
+        const startRotZ = getBallGroup().rotation.z
+
         const progress = { t: 0 }
-        const ballGroup = getBallGroup()
         const tl = gsap.timeline({
-            onComplete: () => resetBall()
+            onComplete: () => {
+                activeTimeline = null
+                resetBall()
+            }
         })
+        activeTimeline = tl
 
         tl.to(progress, {
             t: 1,
@@ -143,48 +160,74 @@ export function createKickShot({
             ease: 'power1.out',
             onUpdate: () => {
                 const idx = Math.min(Math.floor(progress.t * steps), steps)
+                const ballGroup = getBallGroup()
                 ballGroup.position.x = pathX[idx]
                 ballGroup.position.y = pathY[idx]
                 ballGroup.position.z = pathZ[idx]
+                // Apply rotation dynamically to current ball
+                const easedRot = 1 - Math.pow(1 - progress.t, 2)
+                ballGroup.rotation.x = startRotX + rotDeltaX * easedRot
+                ballGroup.rotation.y = startRotY + rotDeltaY * easedRot
+                ballGroup.rotation.z = startRotZ + rotDeltaZ * easedRot
                 kickPhysics.activeVelocityVec.copy(velSamples[idx])
                 kickPhysics.activeLateralAccel = accXSamples[idx]
                 updateForceVectors()
             }
         }, 0)
-
-        tl.to(ballGroup.rotation, {
-            x: ballGroup.rotation.x - Math.PI * 4 * finalPower * debugParams.spinMultiplier,
-            y: ballGroup.rotation.y + curve * Math.PI * 2 * debugParams.spinMultiplier,
-            z: ballGroup.rotation.z + finalX * 0.5 * debugParams.spinMultiplier,
-            duration: duration,
-            ease: 'power1.out'
-        }, 0)
     }
 
     function resetBall() {
-        gsap.delayedCall(debugParams.resetDelay, () => {
+        activeDelayedCall = gsap.delayedCall(debugParams.resetDelay, () => {
+            activeDelayedCall = null
             kickPhysics.isKicking = false
             kickPhysics.activeCurveForce = 0
             kickPhysics.activeLateralAccel = 0
             kickPhysics.activeVelocityVec.set(0, 0, 0)
             updateForceVectors()
 
-            const ballGroup = getBallGroup()
+            const resetProgress = { t: 0 }
+            const startPos = getBallGroup().position.clone()
             const resetTl = gsap.timeline({
                 onComplete: () => {
+                    activeTimeline = null
                     renderBirdseye()
                 }
             })
+            activeTimeline = resetTl
 
-            resetTl.to(ballGroup.position, {
-                x: ballStartPosition.x,
-                y: ballStartPosition.y,
-                z: ballStartPosition.z,
+            resetTl.to(resetProgress, {
+                t: 1,
                 duration: 0.5,
-                ease: 'power2.inOut'
+                ease: 'power2.inOut',
+                onUpdate: () => {
+                    const ballGroup = getBallGroup()
+                    ballGroup.position.x = startPos.x + (ballStartPosition.x - startPos.x) * resetProgress.t
+                    ballGroup.position.y = startPos.y + (ballStartPosition.y - startPos.y) * resetProgress.t
+                    ballGroup.position.z = startPos.z + (ballStartPosition.z - startPos.z) * resetProgress.t
+                }
             }, 0)
         })
     }
 
-    return { kick }
+    /** Kill any in-flight kick or reset animation and snap ball to start. */
+    function cancelKick() {
+        if (activeTimeline) {
+            activeTimeline.kill()
+            activeTimeline = null
+        }
+        if (activeDelayedCall) {
+            activeDelayedCall.kill()
+            activeDelayedCall = null
+        }
+        kickPhysics.isKicking = false
+        kickPhysics.activeCurveForce = 0
+        kickPhysics.activeLateralAccel = 0
+        kickPhysics.activeVelocityVec.set(0, 0, 0)
+        updateForceVectors()
+
+        const ballGroup = getBallGroup()
+        ballGroup.position.set(ballStartPosition.x, ballStartPosition.y, ballStartPosition.z)
+    }
+
+    return { kick, cancelKick }
 }
