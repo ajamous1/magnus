@@ -43,10 +43,11 @@ export function createDebugGui(container, debugParams, hooks) {
     vectorsFolder.close()
 
     const spinFolder = gui.addFolder('Spin Preview')
-    spinFolder.add(debugParams, 'spinSpeed', 1, 50, 1).name('Speed')
+    const speedCtrl = spinFolder.add(debugParams, 'spinSpeed', 1, 50, 1).name('Speed')
     const axisXCtrl = spinFolder.add(debugParams, 'spinAxisX', -1, 1, 0.05).name('Axis X')
     const axisYCtrl = spinFolder.add(debugParams, 'spinAxisY', -1, 1, 0.05).name('Axis Y')
     const axisZCtrl = spinFolder.add(debugParams, 'spinAxisZ', -1, 1, 0.05).name('Axis Z')
+    spinFolder.add(debugParams, 'showAngularMomentum').name('Angular Momentum')
 
     // --- Orientation circle widget ---
     const circleSize = 120
@@ -155,5 +156,5 @@ export function createDebugGui(container, debugParams, hooks) {
         }
     })
 
-    return { gui, drawCircle, axisXCtrl, axisYCtrl, axisZCtrl }
+    return { gui, drawCircle, speedCtrl, axisXCtrl, axisYCtrl, axisZCtrl }
 }

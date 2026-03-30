@@ -217,6 +217,19 @@ function buildMainBallForPreview(r) {
     return result.group
 }
 
+// Angular momentum vector (arrow along spin axis)
+const amGroup = new THREE.Group()
+const amShaftGeo = new THREE.CylinderGeometry(0.006, 0.006, 0.5, 6)
+const amHeadGeo = new THREE.ConeGeometry(0.02, 0.06, 6)
+const amMat = new THREE.MeshBasicMaterial({ color: 0xff6b6b })
+const amShaft = new THREE.Mesh(amShaftGeo, amMat)
+amShaft.position.y = 0.25
+const amHead = new THREE.Mesh(amHeadGeo, amMat.clone())
+amHead.position.y = 0.53
+amGroup.add(amShaft, amHead)
+amGroup.visible = false
+spinScene.add(amGroup)
+
 function rebuildSpinBall() {
     spinScene.remove(spinBall)
     spinBall = buildMainBallForPreview(spinRadius)
@@ -246,32 +259,52 @@ const spinResizeObserver = new ResizeObserver(() => {
 })
 spinResizeObserver.observe(spinPanel)
 
-// Drag on spin preview canvas to set spin axis
+// Drag on spin preview canvas — arcball mapping for full 3-axis control
 {
-    let spinDragStart = null
+    let arcballStart = null
+
+    function canvasToSphere(e) {
+        const rect = spinCanvas.getBoundingClientRect()
+        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+        const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1)
+        const r2 = x * x + y * y
+        if (r2 <= 1) return { x, y, z: Math.sqrt(1 - r2) }
+        const r = Math.sqrt(r2)
+        return { x: x / r, y: y / r, z: 0 }
+    }
+
     spinCanvas.addEventListener('pointerdown', e => {
-        spinDragStart = { x: e.clientX, y: e.clientY }
+        arcballStart = canvasToSphere(e)
+        arcballStart.cx = e.clientX
+        arcballStart.cy = e.clientY
         spinCanvas.setPointerCapture(e.pointerId)
     })
     spinCanvas.addEventListener('pointermove', e => {
-        if (!spinDragStart) return
-        const dx = e.clientX - spinDragStart.x
-        const dy = e.clientY - spinDragStart.y
-        const len = Math.sqrt(dx * dx + dy * dy)
-        if (len < 3) return
-        // Perpendicular of drag = rotation axis
-        // Drag right → topspin (Y axis), drag up → sidespin (X axis)
-        debugParams.spinAxisX = -dy / len
-        debugParams.spinAxisY = dx / len
-        debugParams.spinAxisZ = 0
-        // Sync debug GUI if open
+        if (!arcballStart) return
+        const cur = canvasToSphere(e)
+        // Cross product = rotation axis
+        const ax = arcballStart.y * cur.z - arcballStart.z * cur.y
+        const ay = arcballStart.z * cur.x - arcballStart.x * cur.z
+        const az = arcballStart.x * cur.y - arcballStart.y * cur.x
+        const len = Math.sqrt(ax * ax + ay * ay + az * az)
+        if (len < 0.001) return
+        debugParams.spinAxisX = ax / len
+        debugParams.spinAxisY = ay / len
+        debugParams.spinAxisZ = az / len
+        // Map drag distance to spin speed
+        const dx = e.clientX - arcballStart.cx
+        const dy = e.clientY - arcballStart.cy
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const panelSize = Math.max(spinPanel.clientWidth, spinPanel.clientHeight)
+        debugParams.spinSpeed = Math.round(Math.min(50, Math.max(1, (dist / panelSize) * 60)))
+        if (debugGui.speedCtrl) debugGui.speedCtrl.updateDisplay()
         if (debugGui.axisXCtrl) debugGui.axisXCtrl.updateDisplay()
         if (debugGui.axisYCtrl) debugGui.axisYCtrl.updateDisplay()
         if (debugGui.axisZCtrl) debugGui.axisZCtrl.updateDisplay()
         if (debugGui.drawCircle) debugGui.drawCircle()
     })
-    spinCanvas.addEventListener('pointerup', () => { spinDragStart = null })
-    spinCanvas.addEventListener('pointercancel', () => { spinDragStart = null })
+    spinCanvas.addEventListener('pointerup', () => { arcballStart = null })
+    spinCanvas.addEventListener('pointercancel', () => { arcballStart = null })
 }
 
 const previewRadius = 0.4
@@ -376,8 +409,17 @@ const tick = () => {
         const len = Math.sqrt(ax * ax + ay * ay + az * az)
         if (len > 0.001) {
             const axis = new THREE.Vector3(ax / len, ay / len, az / len)
-            spinBall.rotateOnAxis(axis, debugParams.spinSpeed * 0.01)
+            spinBall.rotateOnWorldAxis(axis, debugParams.spinSpeed * 0.01)
+
+            amGroup.visible = debugParams.showAngularMomentum
+            if (amGroup.visible) {
+                const up = new THREE.Vector3(0, 1, 0)
+                amGroup.quaternion.setFromUnitVectors(up, axis)
+            }
+        } else {
+            amGroup.visible = false
         }
+
     }
     spinRenderer.render(spinScene, spinCamera)
 

@@ -32,6 +32,7 @@ export function createDebugParams() {
         spinSpeed: 10,
         spinAxisX: 0,
         spinAxisY: 1,
-        spinAxisZ: 0
+        spinAxisZ: 0,
+        showAngularMomentum: false
     }
 }
