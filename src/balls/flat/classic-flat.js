@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { TRUNC_ICO } from '../geometry/truncated-icosahedron.js'
+import { getPanelColor } from '../panel-colors.js'
 
 export function addClassicFlatLayout(group, config, helpers) {
     const { flattenLocal, unfold, drawPanel } = helpers
@@ -50,10 +51,11 @@ export function addClassicFlatLayout(group, config, helpers) {
     }
 
     const pentFlatMat = new THREE.MeshBasicMaterial({ color: config.secondaryColor, side: THREE.DoubleSide })
-    allFaces.forEach(face => {
+    allFaces.forEach((face, idx) => {
         if (!netPts[face.id]) return
-        drawPanel(netPts[face.id], face.vIdxs, () => 'straight')
-        if (face.isPent) {
+        const override = getPanelColor(config.design, idx)
+        drawPanel(netPts[face.id], face.vIdxs, () => 'straight', idx, override)
+        if (face.isPent && !override) {
             group.children[group.children.length - 2].material = pentFlatMat
         }
     })

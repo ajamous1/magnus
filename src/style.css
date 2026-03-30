@@ -54,19 +54,93 @@ body {
     flex-direction: column;
 }
 
-#panel-debug,
+#panel-spin-preview,
 #panel-birdseye,
 #panel-flight-dynamics {
     flex: 1 0 0px;
 }
 
-#panel-debug {
-    overflow-y: auto;
+/* Spin preview panel */
+.spin-preview-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    outline: none;
 }
 
-#panel-debug > .lil-gui {
-    width: 100%;
-    --background-color: #0a0a0a;
+.spin-preview-label {
+    position: absolute;
+    bottom: 10px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #444;
+    pointer-events: none;
+}
+
+/* Debug overlay — top-left of shooter panel */
+.debug-overlay {
+    display: none;
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 12;
+    max-height: calc(100% - 16px);
+    overflow-y: auto;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.debug-overlay.visible {
+    display: block;
+}
+
+.debug-overlay > .lil-gui {
+    width: 260px;
+    --background-color: transparent;
+}
+
+.debug-overlay > .lil-gui > .title {
+    background: transparent;
+}
+
+/* Spin orientation circle */
+.spin-orientation-circle {
+    cursor: crosshair;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* Debug hint footer */
+.debug-hint {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9;
+    font-size: 11px;
+    color: #555;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+
+.debug-hint kbd {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 11px;
+    color: #777;
 }
 
 /* Resize handles */
@@ -501,6 +575,64 @@ body {
     min-width: 30px;
     text-align: right;
     font-variant-numeric: tabular-nums;
+}
+
+/* Panel color picker button (left of fullscreen) */
+#panel-customizer .panel-color-btn {
+    position: absolute;
+    top: 8px;
+    right: 44px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 6px;
+    color: #666;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: opacity 0.2s, background 0.2s, color 0.2s;
+}
+
+#panel-customizer .panel-color-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+#panel-customizer .panel-color-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ccc;
+}
+
+/* Panel reset button (top-left) */
+#panel-customizer .panel-reset-btn {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 6px;
+    color: #666;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: opacity 0.2s, background 0.2s, color 0.2s;
+}
+
+#panel-customizer .panel-reset-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+#panel-customizer .panel-reset-btn:hover {
+    background: rgba(255, 80, 80, 0.25);
+    color: #ff6b6b;
 }
 
 /* Panel fullscreen button */

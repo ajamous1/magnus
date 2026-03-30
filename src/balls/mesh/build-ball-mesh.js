@@ -17,6 +17,15 @@ export function buildBallMesh(config, radius) {
     })
     group.add(new THREE.Mesh(sphereGeo, sphereMat))
 
+    addStitching(group, config, radius)
+
+    return group
+}
+
+/**
+ * Adds design-specific seam/stitch tube geometry to an existing ball group.
+ */
+export function addStitching(group, config, radius) {
     if (config.design === 'classic') {
         addClassicDesign(group, config, radius)
     } else if (config.design === 'jabulani') {
@@ -26,6 +35,4 @@ export function buildBallMesh(config, radius) {
     } else if (config.design === 'brazuca') {
         addBrazucaDesign(group, config, radius)
     }
-
-    return group
 }

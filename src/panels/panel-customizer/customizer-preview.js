@@ -1,22 +1,15 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
-    buildBallMesh,
     buildExplodedBall,
     buildFlatLayout,
-    applyExplodeFactor
+    applyExplodeFactor,
+    addStitching
 } from '../../balls/index.js'
+import { setPanelColor, clearPanelColors, hasOverrides } from '../../balls/panel-colors.js'
 
 /**
  * 3D / exploded / flat preview for the ball customizer (panel-customizer).
- *
- * @param {object} opts
- * @param {import('three').Scene} opts.mainScene
- * @param {object} opts.ballConfig — mutable ball preset (from `balls` module)
- * @param {number} opts.ballRadius — main pitch ball radius
- * @param {number} opts.previewRadius — customizer viewport ball scale
- * @param {() => import('three').Object3D} opts.getBallGroup
- * @param {(g: import('three').Object3D) => void} opts.setBallGroup
  */
 export function createCustomizerPreview({
     mainScene,
@@ -24,16 +17,25 @@ export function createCustomizerPreview({
     ballRadius,
     previewRadius,
     getBallGroup,
-    setBallGroup
+    setBallGroup,
+    buildMainBall,
+    onBallChanged
 }) {
     const panelRoot = document.getElementById('panel-customizer')
     const zoomStateLabel = document.getElementById('zoom-state-label')
+    const panelColorBtn = document.getElementById('panel-color-btn')
+    const panelColorInput = document.getElementById('panel-color-input')
+    const panelResetBtn = document.getElementById('panel-reset-btn')
+
     const state = {
         custViewMode: 'ball',
         custExplodeFactor: 0,
         custExplodePanels: [],
         ballCamDistance: 1.7,
-        ballCamDirection: new THREE.Vector3(0, 0, 1)
+        ballCamDirection: new THREE.Vector3(0, 0, 1),
+        selectedPanelIndex: null,
+        hoveredPanelIndex: null,
+        cameraAnimTarget: null
     }
 
     const custCanvas = document.querySelector('canvas.customizer-preview')
@@ -50,7 +52,21 @@ export function createCustomizerPreview({
     custFill.position.set(-3, 2, -3)
     custScene.add(custFill)
 
-    let previewBall = buildBallMesh(ballConfig, previewRadius)
+    let previewBall = null
+    const raycaster = new THREE.Raycaster()
+    const mouse = new THREE.Vector2()
+
+    // Build initial preview ball using panel-based mesh
+    function buildPanelBall() {
+        const result = buildExplodedBall(ballConfig, previewRadius)
+        const ball = result.group
+        state.custExplodePanels = result.panels
+        applyExplodeFactor(state.custExplodePanels, state.custExplodeFactor)
+        if (state.custExplodeFactor === 0) addStitching(ball, ballConfig, previewRadius)
+        return ball
+    }
+
+    previewBall = buildPanelBall()
     custScene.add(previewBall)
 
     const custCamera = new THREE.PerspectiveCamera(
@@ -90,6 +106,7 @@ export function createCustomizerPreview({
         custCamera.lookAt(0, 0, 0)
     }
 
+    // --- Flat view drag rotation ---
     {
         let flatDragging = false
         let flatLastX = 0
@@ -136,13 +153,316 @@ export function createCustomizerPreview({
     })
     custResizeObserver.observe(custViewport)
 
+    // --- Panel highlight helpers ---
+
+    function findPanelIndex(object) {
+        let current = object
+        while (current) {
+            if (current.userData.panelIndex != null) return current.userData.panelIndex
+            current = current.parent
+        }
+        return null
+    }
+
+    const HOVER_EMISSIVE = new THREE.Color('#1a3a5c')
+    const SELECT_EMISSIVE_BOOST = 0.45
+
+    function setHoverHighlight(panelIndex, on) {
+        if (panelIndex == null || panelIndex === state.selectedPanelIndex) return
+        if (state.custViewMode === 'flat') {
+            // Flat view: meshes are direct children
+            for (const child of previewBall.children) {
+                if (child.userData.panelIndex === panelIndex && child.isMesh) {
+                    if (on) {
+                        child._savedColor = child.material.color.getHex()
+                        const c = new THREE.Color(child._savedColor)
+                        c.lerp(new THREE.Color('#4488cc'), 0.2)
+                        child.material.color.set(c)
+                    } else if (child._savedColor != null) {
+                        child.material.color.setHex(child._savedColor)
+                        delete child._savedColor
+                    }
+                }
+            }
+        } else {
+            // 3D/exploded: panels are groups with fill mesh as first child
+            for (const child of previewBall.children) {
+                if (child.userData.panelIndex === panelIndex && child.isGroup) {
+                    const fillMesh = child.children[0]
+                    if (!fillMesh || !fillMesh.material) continue
+                    if (on) {
+                        fillMesh._savedEmissive = fillMesh.material.emissive.getHex()
+                        fillMesh._savedEmissiveIntensity = fillMesh.material.emissiveIntensity
+                        fillMesh.material.emissive.copy(HOVER_EMISSIVE)
+                        fillMesh.material.emissiveIntensity = 0.4
+                    } else if (fillMesh._savedEmissive != null) {
+                        fillMesh.material.emissive.setHex(fillMesh._savedEmissive)
+                        fillMesh.material.emissiveIntensity = fillMesh._savedEmissiveIntensity
+                        delete fillMesh._savedEmissive
+                        delete fillMesh._savedEmissiveIntensity
+                    }
+                }
+            }
+        }
+    }
+
+    function setSelectionHighlight(panelIndex, on) {
+        if (panelIndex == null) return
+        if (state.custViewMode === 'flat') {
+            for (const child of previewBall.children) {
+                if (child.userData.panelIndex === panelIndex && child.isMesh) {
+                    if (on) {
+                        child._selectSavedColor = child.material.color.getHex()
+                        const c = new THREE.Color(child._selectSavedColor)
+                        c.lerp(new THREE.Color('#ffffff'), 0.25)
+                        child.material.color.set(c)
+                    } else if (child._selectSavedColor != null) {
+                        child.material.color.setHex(child._selectSavedColor)
+                        delete child._selectSavedColor
+                    }
+                }
+                if (child.userData.panelIndex === panelIndex && child.isLine) {
+                    if (on) {
+                        if (!child._ownMaterial) {
+                            child._ownMaterial = child.material.clone()
+                            child.material = child._ownMaterial
+                        }
+                        child._selectSavedColor = child.material.color.getHex()
+                        child.material.color.set('#ffffff')
+                    } else if (child._selectSavedColor != null) {
+                        child.material.color.setHex(child._selectSavedColor)
+                        delete child._selectSavedColor
+                    }
+                }
+            }
+        } else {
+            for (const child of previewBall.children) {
+                if (child.userData.panelIndex === panelIndex && child.isGroup) {
+                    const fillMesh = child.children[0]
+                    const borderLine = child.children[1]
+                    if (fillMesh && fillMesh.material) {
+                        if (on) {
+                            fillMesh._selectSavedEmissiveIntensity = fillMesh.material.emissiveIntensity
+                            fillMesh.material.emissiveIntensity = SELECT_EMISSIVE_BOOST
+                        } else if (fillMesh._selectSavedEmissiveIntensity != null) {
+                            fillMesh.material.emissiveIntensity = fillMesh._selectSavedEmissiveIntensity
+                            delete fillMesh._selectSavedEmissiveIntensity
+                        }
+                    }
+                    if (borderLine && borderLine.material) {
+                        if (on) {
+                            if (!borderLine._ownMaterial) {
+                                borderLine._ownMaterial = borderLine.material.clone()
+                                borderLine.material = borderLine._ownMaterial
+                            }
+                            borderLine._selectSavedColor = borderLine.material.color.getHex()
+                            borderLine.material.color.set('#ffffff')
+                        } else if (borderLine._selectSavedColor != null) {
+                            borderLine.material.color.setHex(borderLine._selectSavedColor)
+                            delete borderLine._selectSavedColor
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    function selectPanel(index) {
+        if (state.selectedPanelIndex != null) {
+            setSelectionHighlight(state.selectedPanelIndex, false)
+        }
+        state.selectedPanelIndex = index
+
+        if (index != null) {
+            setSelectionHighlight(index, true)
+            panelColorBtn.style.display = ''
+
+            // Set color input to panel's current color
+            if (state.custViewMode === 'flat') {
+                for (const child of previewBall.children) {
+                    if (child.userData.panelIndex === index && child.isMesh) {
+                        panelColorInput.value = '#' + child.material.color.getHexString()
+                        break
+                    }
+                }
+            } else {
+                for (const child of previewBall.children) {
+                    if (child.userData.panelIndex === index && child.isGroup) {
+                        const fillMesh = child.children[0]
+                        if (fillMesh) panelColorInput.value = '#' + fillMesh.material.color.getHexString()
+                        break
+                    }
+                }
+            }
+
+            // In 3D view, stop rotation and animate camera to face panel
+            if (state.custViewMode !== 'flat') {
+                custControls.autoRotate = false
+                const panel = state.custExplodePanels[index]
+                if (panel) {
+                    state.cameraAnimTarget = panel.centroidDir.clone().multiplyScalar(state.ballCamDistance)
+                }
+            }
+        } else {
+            panelColorBtn.style.display = 'none'
+
+            // Resume rotation in 3D view
+            if (state.custViewMode !== 'flat') {
+                custControls.autoRotate = true
+                state.cameraAnimTarget = null
+            }
+        }
+    }
+
+    function updateResetButtonVisibility() {
+        panelResetBtn.style.display = hasOverrides(ballConfig.design) ? '' : 'none'
+    }
+
+    // --- Raycaster click detection ---
+
+    let pointerDownPos = null
+
+    custCanvas.addEventListener('pointerdown', e => {
+        pointerDownPos = { x: e.clientX, y: e.clientY }
+    })
+
+    custCanvas.addEventListener('pointerup', e => {
+        if (!pointerDownPos) return
+        const dx = e.clientX - pointerDownPos.x
+        const dy = e.clientY - pointerDownPos.y
+        pointerDownPos = null
+        if (Math.sqrt(dx * dx + dy * dy) > 5) return
+
+        const rect = custCanvas.getBoundingClientRect()
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+        raycaster.setFromCamera(mouse, custCamera)
+
+        const intersects = raycaster.intersectObjects(previewBall.children, true)
+        let clickedPanelIndex = null
+        for (const hit of intersects) {
+            const idx = findPanelIndex(hit.object)
+            if (idx != null) {
+                clickedPanelIndex = idx
+                break
+            }
+        }
+
+        selectPanel(clickedPanelIndex)
+    })
+
+    // --- Hover highlight ---
+
+    custCanvas.addEventListener('pointermove', e => {
+        const rect = custCanvas.getBoundingClientRect()
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+        raycaster.setFromCamera(mouse, custCamera)
+
+        const intersects = raycaster.intersectObjects(previewBall.children, true)
+        let hoveredIndex = null
+        for (const hit of intersects) {
+            const idx = findPanelIndex(hit.object)
+            if (idx != null) {
+                hoveredIndex = idx
+                break
+            }
+        }
+
+        if (hoveredIndex !== state.hoveredPanelIndex) {
+            setHoverHighlight(state.hoveredPanelIndex, false)
+            state.hoveredPanelIndex = hoveredIndex
+            setHoverHighlight(state.hoveredPanelIndex, true)
+            custCanvas.style.cursor = hoveredIndex != null ? 'pointer' : 'grab'
+        }
+    })
+
+    custCanvas.addEventListener('pointerleave', () => {
+        if (state.hoveredPanelIndex != null) {
+            setHoverHighlight(state.hoveredPanelIndex, false)
+            state.hoveredPanelIndex = null
+        }
+        custCanvas.style.cursor = 'grab'
+    })
+
+    // --- Color picker wiring ---
+
+    panelColorBtn.addEventListener('click', e => {
+        e.stopPropagation()
+        panelColorInput.click()
+    })
+
+    panelColorInput.addEventListener('input', e => {
+        if (state.selectedPanelIndex == null) return
+        const color = e.target.value
+        setPanelColor(ballConfig.design, state.selectedPanelIndex, color)
+        updateResetButtonVisibility()
+
+        // Update material in-place
+        if (state.custViewMode === 'flat') {
+            for (const child of previewBall.children) {
+                if (child.userData.panelIndex === state.selectedPanelIndex && child.isMesh) {
+                    child.material.color.set(color)
+                    child._selectSavedColor = new THREE.Color(color).getHex()
+                }
+            }
+        } else {
+            for (const child of previewBall.children) {
+                if (child.userData.panelIndex === state.selectedPanelIndex && child.isGroup) {
+                    const fillMesh = child.children[0]
+                    if (fillMesh) {
+                        fillMesh.material.color.set(color)
+                        fillMesh.material.emissive.set(color)
+                    }
+                }
+            }
+        }
+
+        // Also update main scene ball
+        const pos = getBallGroup().position.clone()
+        const rot = getBallGroup().rotation.clone()
+        mainScene.remove(getBallGroup())
+        const next = buildMainBall()
+        next.position.copy(pos)
+        next.rotation.copy(rot)
+        mainScene.add(next)
+        setBallGroup(next)
+        if (onBallChanged) onBallChanged()
+    })
+
+    // --- Reset button ---
+
+    panelResetBtn.addEventListener('click', e => {
+        e.stopPropagation()
+        clearPanelColors(ballConfig.design)
+        selectPanel(null)
+        updateResetButtonVisibility()
+        updateBall()
+    })
+
+    // --- Camera animation (lerp toward selected panel) ---
+
+    function animateCamera() {
+        if (state.cameraAnimTarget && state.custViewMode !== 'flat') {
+            custCamera.position.lerp(state.cameraAnimTarget, 0.08)
+            custCamera.lookAt(0, 0, 0)
+            const dist = custCamera.position.distanceTo(state.cameraAnimTarget)
+            if (dist < 0.01) {
+                custCamera.position.copy(state.cameraAnimTarget)
+                state.cameraAnimTarget = null
+            }
+        }
+    }
+
+    // --- Main updateBall ---
+
     function updateBall() {
-        if (state.custViewMode === 'ball') rememberBallCameraPose()
+        if (state.custViewMode === 'ball' || state.custViewMode !== 'flat') rememberBallCameraPose()
 
         const pos = getBallGroup().position.clone()
         const rot = getBallGroup().rotation.clone()
         mainScene.remove(getBallGroup())
-        const next = buildBallMesh(ballConfig, ballRadius)
+        const next = buildMainBall()
         next.position.copy(pos)
         next.rotation.copy(rot)
         mainScene.add(next)
@@ -161,16 +481,15 @@ export function createCustomizerPreview({
             custCamera.position.set(0, 0, ballConfig.design === 'classic' ? 18 : 9)
             custCamera.lookAt(0, 0, 0)
         } else {
-            state.custExplodePanels = []
-            if (state.custExplodeFactor > 0) {
-                const result = buildExplodedBall(ballConfig, previewRadius)
-                previewBall = result.group
-                state.custExplodePanels = result.panels
-                applyExplodeFactor(state.custExplodePanels, state.custExplodeFactor)
-            } else {
-                previewBall = buildBallMesh(ballConfig, previewRadius)
+            const result = buildExplodedBall(ballConfig, previewRadius)
+            previewBall = result.group
+            state.custExplodePanels = result.panels
+            applyExplodeFactor(state.custExplodePanels, state.custExplodeFactor)
+            if (state.custExplodeFactor === 0) addStitching(previewBall, ballConfig, previewRadius)
+
+            if (state.selectedPanelIndex == null) {
+                custControls.autoRotate = true
             }
-            custControls.autoRotate = true
             custControls.enableRotate = true
             custControls.enablePan = false
             custControls.minPolarAngle = 0
@@ -180,6 +499,14 @@ export function createCustomizerPreview({
             restoreBallCameraPose()
         }
         custScene.add(previewBall)
+
+        // Re-apply selection highlight if still selected
+        if (state.selectedPanelIndex != null) {
+            setSelectionHighlight(state.selectedPanelIndex, true)
+        }
+
+        updateResetButtonVisibility()
+        if (onBallChanged) onBallChanged()
     }
 
     function wireExplodeSlider() {
@@ -203,10 +530,14 @@ export function createCustomizerPreview({
 
             if (state.custViewMode === 'flat') return
 
+            // Rebuild when crossing zero boundary (stitching add/remove)
             const crossedZero = (prev === 0) !== (state.custExplodeFactor === 0)
             if (crossedZero) {
                 updateBall()
-            } else if (state.custExplodeFactor > 0 && state.custExplodePanels.length > 0) {
+                return
+            }
+
+            if (state.custExplodePanels.length > 0) {
                 applyExplodeFactor(state.custExplodePanels, state.custExplodeFactor)
             }
             custControls.maxDistance = 4.4 + state.custExplodeFactor * 4.2
@@ -224,6 +555,7 @@ export function createCustomizerPreview({
                 document.querySelectorAll('.design-btn[data-design]').forEach(b => {
                     b.classList.toggle('active', b.dataset.design === ballConfig.design)
                 })
+                selectPanel(null)
                 updateBall()
             })
         })
@@ -234,6 +566,7 @@ export function createCustomizerPreview({
                 document.querySelectorAll('.view-btn').forEach(b => {
                     b.classList.toggle('active', b.dataset.view === state.custViewMode)
                 })
+                selectPanel(null)
                 updateBall()
             })
         })
@@ -289,6 +622,7 @@ export function createCustomizerPreview({
         custControls,
         updateBall,
         wireExplodeSlider,
-        wireCustomizerUi
+        wireCustomizerUi,
+        animateCamera
     }
 }

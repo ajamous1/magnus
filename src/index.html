@@ -22,9 +22,18 @@
                     <span class="dot v-gravity"></span><span>Gravity</span>
                     <span class="dot v-wind"></span><span>Wind</span>
                 </div>
+                <div class="debug-overlay" id="debug-overlay"></div>
+                <div class="debug-hint" id="debug-hint">Press <kbd>H</kbd> for debug menu</div>
             </div>
             <div class="resize-handle resize-v"></div>
             <div class="bento-panel" id="panel-customizer">
+                <button class="panel-reset-btn" id="panel-reset-btn" title="Reset panel colors" style="display:none">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 22v-6h6"/></svg>
+                </button>
+                <button class="panel-color-btn" id="panel-color-btn" title="Pick panel color" style="display:none">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.5" fill="currentColor"/></svg>
+                </button>
+                <input type="color" id="panel-color-input" style="position:absolute;visibility:hidden;width:0;height:0;pointer-events:none">
                 <button class="panel-fs-btn" title="Toggle fullscreen">
                     <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
@@ -111,11 +120,13 @@
         </div>
         <div class="resize-handle resize-h"></div>
         <div class="bento-row" id="bottom-row">
-            <div class="bento-panel" id="panel-debug">
+            <div class="bento-panel" id="panel-spin-preview">
                 <button class="panel-fs-btn" title="Toggle fullscreen">
                     <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
                 </button>
+                <canvas class="spin-preview-canvas"></canvas>
+                <div class="spin-preview-label">Spin Preview</div>
             </div>
             <div class="resize-handle resize-v"></div>
             <div class="bento-panel" id="panel-birdseye">

@@ -4,6 +4,7 @@ import { buildSphericalPanel, buildPanelBorder } from './explode-helpers.js'
 import { BRAZUCA_VERTICES, BRAZUCA_FACES, BRAZUCA_EDGES, generateBrazucaEdgeCurves } from './geometry/brazuca-geometry.js'
 import { TRIONDA_VERTICES, TRIONDA_FACES, TRIONDA_EDGES, generateTriondaEdgeCurves } from './geometry/trionda-geometry.js'
 import { JABULANI_VERTICES, JABULANI_FACES, generateJabulaniEdgeCurves } from './geometry/jabulani-geometry.js'
+import { getPanelColor } from './panel-colors.js'
 
 // --- Shared panel-building helpers for S-curve designs (Brazuca, Trionda) ---
 
@@ -166,6 +167,16 @@ export function buildExplodedBall(config, radius) {
             panels.push({ mesh: panelGroup, centroidDir, baseRadius: radius })
         })
     }
+
+    panels.forEach((panel, i) => {
+        panel.mesh.userData.panelIndex = i
+        const override = getPanelColor(config.design, i)
+        if (override) {
+            const fillMesh = panel.mesh.children[0]
+            fillMesh.material.color.set(override)
+            fillMesh.material.emissive.set(override)
+        }
+    })
 
     return { group, panels }
 }

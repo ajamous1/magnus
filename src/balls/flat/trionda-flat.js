@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { TRIONDA_VERTICES, TRIONDA_FACES } from '../geometry/trionda-geometry.js'
+import { getPanelColor } from '../panel-colors.js'
 
 export function addTriondaFlatLayout(config, helpers) {
     const { flattenLocal, unfold, drawPanel } = helpers
@@ -22,7 +23,8 @@ export function addTriondaFlatLayout(config, helpers) {
     netPts['P1'] = unfold(netPts['P3'], localPts['P1'], 0, 2)
     netPts['P2'] = unfold(netPts['P3'], localPts['P2'], 0, 1)
 
-    panelDefs.forEach(panel => {
-        drawPanel(netPts[panel.id], panel.vIdxs, () => 'scurve')
+    panelDefs.forEach((panel, idx) => {
+        const override = getPanelColor(config.design, idx)
+        drawPanel(netPts[panel.id], panel.vIdxs, () => 'scurve', idx, override)
     })
 }

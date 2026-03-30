@@ -28,6 +28,10 @@ export function createDebugParams() {
         flowDebugArrows: false,
         flowDebugVolumes: false,
         flowDebugLogs: false,
-        flowDebugStreamlines: false
+        flowDebugStreamlines: false,
+        spinSpeed: 10,
+        spinAxisX: 0,
+        spinAxisY: 1,
+        spinAxisZ: 0
     }
 }

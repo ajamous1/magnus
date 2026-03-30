@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { BRAZUCA_VERTICES, BRAZUCA_FACES } from '../geometry/brazuca-geometry.js'
+import { getPanelColor } from '../panel-colors.js'
 
 export function addBrazucaFlatLayout(config, helpers) {
     const { flattenLocal, unfold, drawPanel } = helpers
@@ -35,7 +36,8 @@ export function addBrazucaFlatLayout(config, helpers) {
     netPts['F2'] = unfold(netPts['F4'], localPts['F2'], 4, 0)
     netPts['F5'] = unfold(netPts['F0'], localPts['F5'], 1, 3)
 
-    faceDefs.forEach(face => {
-        drawPanel(netPts[face.id], face.vIdxs, () => 'scurve')
+    faceDefs.forEach((face, idx) => {
+        const override = getPanelColor(config.design, idx)
+        drawPanel(netPts[face.id], face.vIdxs, () => 'scurve', idx, override)
     })
 }

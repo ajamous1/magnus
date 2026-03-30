@@ -43,7 +43,7 @@ export function createFlatLayoutHelpers(group, config) {
         return pts
     }
 
-    function drawPanel(pts, vIdxList, edgeTypeFn) {
+    function drawPanel(pts, vIdxList, edgeTypeFn, panelIndex, overrideColor) {
         const n = pts.length
         const cx = pts.reduce((s, p) => s + p.x, 0) / n
         const cy = pts.reduce((s, p) => s + p.y, 0) / n
@@ -84,10 +84,16 @@ export function createFlatLayoutHelpers(group, config) {
                 }
             }
         }
-        group.add(new THREE.Mesh(new THREE.ShapeGeometry(shape), fillMat.clone()))
+        const mat = fillMat.clone()
+        if (overrideColor) mat.color.set(overrideColor)
+        const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat)
+        if (panelIndex != null) mesh.userData.panelIndex = panelIndex
+        group.add(mesh)
         const lp = shape.getPoints(48).map(p => new THREE.Vector3(p.x, p.y, 0.01))
         lp.push(lp[0])
-        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lp), lineMat))
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(lp), lineMat)
+        if (panelIndex != null) line.userData.panelIndex = panelIndex
+        group.add(line)
     }
 
     return { fillMat, lineMat, flattenLocal, unfold, drawPanel }

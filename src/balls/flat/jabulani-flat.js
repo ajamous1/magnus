@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { JABULANI_VERTICES, JABULANI_FACES, JABULANI_MID_EDGES } from '../geometry/jabulani-geometry.js'
+import { getPanelColor } from '../panel-colors.js'
 
 export function addJabulaniFlatLayout(config, helpers) {
     const { flattenLocal, unfold, drawPanel } = helpers
@@ -33,9 +34,10 @@ export function addJabulaniFlatLayout(config, helpers) {
     netPts['T3'] = unfold(netPts['H1'], localPts['T3'], 5, 11)
     netPts['H0'] = unfold(netPts['T1'], localPts['H0'], 6, 8)
 
-    panelDefs.forEach(panel => {
+    panelDefs.forEach((panel, idx) => {
+        const override = getPanelColor(config.design, idx)
         drawPanel(netPts[panel.id], panel.vIdxs, (va, vb) =>
             (!panel.isTri && isMidEdge(va, vb)) ? 'mid' : 'bow'
-        )
+        , idx, override)
     })
 }

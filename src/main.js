@@ -3,6 +3,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
     ballConfig,
     buildBallMesh,
+    buildExplodedBall,
+    applyExplodeFactor,
+    addStitching,
     BALL_DESIGNS
 } from './balls/index.js'
 import { createVisualFilterController, createFluidFlowOverlay } from './filters/index.js'
@@ -60,7 +63,14 @@ const ballRadius = 0.22
 const penaltySpotZ = -11
 const ballStartPosition = { x: 0, y: ballRadius, z: penaltySpotZ }
 
-let ballGroup = buildBallMesh(ballConfig, ballRadius)
+function buildMainBall() {
+    const result = buildExplodedBall(ballConfig, ballRadius)
+    applyExplodeFactor(result.panels, 0)
+    addStitching(result.group, ballConfig, ballRadius)
+    return result.group
+}
+
+let ballGroup = buildMainBall()
 ballGroup.position.set(ballStartPosition.x, ballStartPosition.y, ballStartPosition.z)
 scene.add(ballGroup)
 
@@ -175,13 +185,94 @@ const {
     canvas
 })
 
-createDebugGui(document.getElementById('panel-debug'), debugParams, {
+const debugGui = createDebugGui(document.getElementById('debug-overlay'), debugParams, {
     onOrbitControlsChange: (v) => { controls.enabled = v },
     onVectorFolderChange: () => updateForceVectors(),
     onVisualFilterChange: () => applyVisualFilter()
 })
 
 applyVisualFilter()
+
+// --- Spin preview panel ---
+const spinPanel = document.getElementById('panel-spin-preview')
+const spinCanvas = document.querySelector('canvas.spin-preview-canvas')
+const spinScene = new THREE.Scene()
+spinScene.background = new THREE.Color('#0a0a0a')
+spinScene.add(new THREE.AmbientLight(0xffffff, 1.5))
+const spinKey = new THREE.DirectionalLight(0xffffff, 2.5)
+spinKey.position.set(3, 4, 5)
+spinScene.add(spinKey)
+const spinFill = new THREE.DirectionalLight(0xffffff, 0.8)
+spinFill.position.set(-3, 2, -3)
+spinScene.add(spinFill)
+
+const spinRadius = 0.4
+let spinBall = buildMainBallForPreview(spinRadius)
+spinScene.add(spinBall)
+
+function buildMainBallForPreview(r) {
+    const result = buildExplodedBall(ballConfig, r)
+    applyExplodeFactor(result.panels, 0)
+    addStitching(result.group, ballConfig, r)
+    return result.group
+}
+
+function rebuildSpinBall() {
+    spinScene.remove(spinBall)
+    spinBall = buildMainBallForPreview(spinRadius)
+    spinScene.add(spinBall)
+}
+
+const spinCamera = new THREE.PerspectiveCamera(
+    40,
+    spinPanel.clientWidth / (spinPanel.clientHeight || 1),
+    0.1, 50
+)
+spinCamera.position.set(0, 0, 1.5)
+spinCamera.lookAt(0, 0, 0)
+
+const spinRenderer = new THREE.WebGLRenderer({ canvas: spinCanvas, antialias: true })
+spinRenderer.setSize(spinPanel.clientWidth, spinPanel.clientHeight)
+spinRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+
+const spinResizeObserver = new ResizeObserver(() => {
+    const w = spinPanel.clientWidth
+    const h = spinPanel.clientHeight
+    if (w === 0 || h === 0) return
+    spinCamera.aspect = w / h
+    spinCamera.updateProjectionMatrix()
+    spinRenderer.setSize(w, h)
+    spinRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+})
+spinResizeObserver.observe(spinPanel)
+
+// Drag on spin preview canvas to set spin axis
+{
+    let spinDragStart = null
+    spinCanvas.addEventListener('pointerdown', e => {
+        spinDragStart = { x: e.clientX, y: e.clientY }
+        spinCanvas.setPointerCapture(e.pointerId)
+    })
+    spinCanvas.addEventListener('pointermove', e => {
+        if (!spinDragStart) return
+        const dx = e.clientX - spinDragStart.x
+        const dy = e.clientY - spinDragStart.y
+        const len = Math.sqrt(dx * dx + dy * dy)
+        if (len < 3) return
+        // Perpendicular of drag = rotation axis
+        // Drag right → topspin (Y axis), drag up → sidespin (X axis)
+        debugParams.spinAxisX = -dy / len
+        debugParams.spinAxisY = dx / len
+        debugParams.spinAxisZ = 0
+        // Sync debug GUI if open
+        if (debugGui.axisXCtrl) debugGui.axisXCtrl.updateDisplay()
+        if (debugGui.axisYCtrl) debugGui.axisYCtrl.updateDisplay()
+        if (debugGui.axisZCtrl) debugGui.axisZCtrl.updateDisplay()
+        if (debugGui.drawCircle) debugGui.drawCircle()
+    })
+    spinCanvas.addEventListener('pointerup', () => { spinDragStart = null })
+    spinCanvas.addEventListener('pointercancel', () => { spinDragStart = null })
+}
 
 const previewRadius = 0.4
 const customizer = createCustomizerPreview({
@@ -190,7 +281,9 @@ const customizer = createCustomizerPreview({
     ballRadius,
     previewRadius,
     getBallGroup,
-    setBallGroup
+    setBallGroup,
+    buildMainBall,
+    onBallChanged: rebuildSpinBall
 })
 const { updateBall, custScene, custCamera, custRenderer, custControls } = customizer
 customizer.wireCustomizerUi()
@@ -275,6 +368,20 @@ const tick = () => {
         fieldLines.visible = prevFieldLinesVisible
     }
 
+    // Spin preview — rotate around user-defined axis
+    {
+        const ax = debugParams.spinAxisX
+        const ay = debugParams.spinAxisY
+        const az = debugParams.spinAxisZ
+        const len = Math.sqrt(ax * ax + ay * ay + az * az)
+        if (len > 0.001) {
+            const axis = new THREE.Vector3(ax / len, ay / len, az / len)
+            spinBall.rotateOnAxis(axis, debugParams.spinSpeed * 0.01)
+        }
+    }
+    spinRenderer.render(spinScene, spinCamera)
+
+    customizer.animateCamera()
     custControls.update()
     custRenderer.render(custScene, custCamera)
 
