@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Magnus</title>
-  <script type="module" crossorigin src="/assets/index-C6E6uQ2M.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CcPGnjpN.css">
+  <script type="module" crossorigin src="/assets/index-DgE5d3_1.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BNxDKJ6-.css">
 </head>
 <body>
     <div class="bento-grid">
@@ -34,35 +34,77 @@
                     <canvas class="customizer-preview"></canvas>
                 </div>
                 <div class="customizer-controls">
-                    <div class="control-group">
-                        <span class="control-label">View</span>
-                        <div class="design-buttons">
-                            <button class="view-btn active" data-view="ball">3D</button>
-                            <button class="view-btn" data-view="flat">Panels</button>
+                    <div class="quick-tray">
+                        <div class="quick-switch-row">
+                            <div class="view-stack">
+                                <span class="control-label">VIEW MODE</span>
+                                <div class="segment segment-view">
+                                    <button class="view-btn active" data-view="ball">3D</button>
+                                    <button class="view-btn" data-view="flat">PANEL</button>
+                                </div>
+                            </div>
+                            <div class="design-stack">
+                                <span class="control-label">BALL DESIGN</span>
+                                <div class="segment segment-design">
+                                    <button class="design-btn active" data-design="classic">CLASSIC</button>
+                                    <button class="design-btn" data-design="jabulani">JABULANI</button>
+                                    <button class="design-btn" data-design="brazuca">BRAZUCA</button>
+                                    <button class="design-btn" data-design="trionda">TRIONDA</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="quick-controls-row">
+                            <div class="quick-explode">
+                                <span class="control-label">EXPLOSION VIEW</span>
+                                <input type="range" id="explode-slider" min="0" max="1" step="0.005" value="0">
+                            </div>
+
+                            <div class="quick-bottom-row">
+                                <div class="color-token">
+                                    <span class="control-label">PRIMARY</span>
+                                    <input type="color" class="color-picker square" id="primary-color" value="#ffffff" title="Primary">
+                                </div>
+                                <div class="color-token">
+                                    <span class="control-label">SECONDARY</span>
+                                    <input type="color" class="color-picker square" id="secondary-color" value="#333333" title="Secondary">
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="control-group">
-                        <span class="control-label">Design</span>
-                        <div class="design-buttons">
-                            <button class="design-btn active" data-design="classic">Classic</button>
-                            <button class="design-btn" data-design="jabulani">Jabulani</button>
-                            <button class="design-btn" data-design="brazuca">Brazuca</button>
-                            <button class="design-btn" data-design="trionda">Trionda</button>
+
+                    <div class="detailed-tray">
+                        <div class="control-group">
+                            <span class="control-label">Ball Type</span>
+                            <div class="design-buttons">
+                                <button class="design-btn active" data-design="classic">CLASSIC</button>
+                                <button class="design-btn" data-design="jabulani">JABULANI</button>
+                                <button class="design-btn" data-design="brazuca">BRAZUCA</button>
+                                <button class="design-btn" data-design="trionda">TRIONDA</button>
+                            </div>
                         </div>
-                    </div>
-                    <div class="control-group">
-                        <span class="control-label">Primary</span>
-                        <input type="color" class="color-picker" id="primary-color" value="#ffffff">
-                    </div>
-                    <div class="control-group">
-                        <span class="control-label">Stitching</span>
-                        <input type="color" class="color-picker" id="secondary-color" value="#333333">
-                    </div>
-                    <div class="control-group explode-control">
-                        <span class="control-label">Explode</span>
-                        <div class="explode-row">
-                            <input type="range" id="explode-slider" min="0" max="1" step="0.005" value="0">
-                            <span class="explode-val" id="explode-val">0%</span>
+
+                        <div class="control-group">
+                            <span class="control-label">View</span>
+                            <div class="design-buttons">
+                                <button class="view-btn active" data-view="ball">3D</button>
+                                <button class="view-btn" data-view="flat">PANEL</button>
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <span class="control-label">Explosion</span>
+                            <div class="explode-row">
+                                <input type="range" id="explode-slider-detail" min="0" max="1" step="0.005" value="0">
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <span class="control-label">Colors</span>
+                            <div class="quick-bottom-row">
+                                <input type="color" class="color-picker square" id="primary-color-detail" value="#ffffff" title="Primary">
+                                <input type="color" class="color-picker square" id="secondary-color-detail" value="#333333" title="Secondary">
+                            </div>
                         </div>
                     </div>
                 </div>

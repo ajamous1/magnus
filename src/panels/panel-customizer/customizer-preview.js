@@ -26,10 +26,14 @@ export function createCustomizerPreview({
     getBallGroup,
     setBallGroup
 }) {
+    const panelRoot = document.getElementById('panel-customizer')
+    const zoomStateLabel = document.getElementById('zoom-state-label')
     const state = {
         custViewMode: 'ball',
         custExplodeFactor: 0,
-        custExplodePanels: []
+        custExplodePanels: [],
+        ballCamDistance: 1.7,
+        ballCamDirection: new THREE.Vector3(0, 0, 1)
     }
 
     const custCanvas = document.querySelector('canvas.customizer-preview')
@@ -54,7 +58,7 @@ export function createCustomizerPreview({
         custViewport.clientWidth / (custViewport.clientHeight || 1),
         0.1, 50
     )
-    custCamera.position.set(0, 0, 1.2)
+    custCamera.position.set(0, 0, state.ballCamDistance)
     custCamera.lookAt(0, 0, 0)
 
     const custRenderer = new THREE.WebGLRenderer({ canvas: custCanvas, antialias: true })
@@ -68,6 +72,23 @@ export function createCustomizerPreview({
     custControls.autoRotateSpeed = 2.0
     custControls.minDistance = 0.6
     custControls.maxDistance = 3.0
+
+    function rememberBallCameraPose() {
+        const dist = custCamera.position.length()
+        if (dist < 1e-4) return
+        state.ballCamDistance = dist
+        state.ballCamDirection.copy(custCamera.position).normalize()
+    }
+
+    function restoreBallCameraPose() {
+        const minDist = 0.9
+        const maxDist = 4.4 + state.custExplodeFactor * 4.2
+        const d = Math.min(maxDist, Math.max(minDist, state.ballCamDistance))
+        state.ballCamDistance = d
+        if (state.ballCamDirection.lengthSq() < 1e-6) state.ballCamDirection.set(0, 0, 1)
+        custCamera.position.copy(state.ballCamDirection).multiplyScalar(d)
+        custCamera.lookAt(0, 0, 0)
+    }
 
     {
         let flatDragging = false
@@ -116,6 +137,8 @@ export function createCustomizerPreview({
     custResizeObserver.observe(custViewport)
 
     function updateBall() {
+        if (state.custViewMode === 'ball') rememberBallCameraPose()
+
         const pos = getBallGroup().position.clone()
         const rot = getBallGroup().rotation.clone()
         mainScene.remove(getBallGroup())
@@ -152,22 +175,31 @@ export function createCustomizerPreview({
             custControls.enablePan = false
             custControls.minPolarAngle = 0
             custControls.maxPolarAngle = Math.PI
-            custControls.minDistance = 0.6
-            custControls.maxDistance = 3.0 + state.custExplodeFactor * 5.0
-            custCamera.position.set(0, 0, 1.2)
-            custCamera.lookAt(0, 0, 0)
+            custControls.minDistance = 0.9
+            custControls.maxDistance = 4.4 + state.custExplodeFactor * 4.2
+            restoreBallCameraPose()
         }
         custScene.add(previewBall)
     }
 
     function wireExplodeSlider() {
         const explodeSlider = document.getElementById('explode-slider')
+        const explodeSliderDetail = document.getElementById('explode-slider-detail')
         const explodeVal = document.getElementById('explode-val')
+        const explodeValDetail = document.getElementById('explode-val-detail')
 
-        explodeSlider.addEventListener('input', (e) => {
+        function syncExplode(v) {
+            const pct = Math.round(v * 100) + '%'
+            if (explodeVal) explodeVal.textContent = pct
+            if (explodeValDetail) explodeValDetail.textContent = pct
+            if (explodeSlider && explodeSlider.value !== String(v)) explodeSlider.value = String(v)
+            if (explodeSliderDetail && explodeSliderDetail.value !== String(v)) explodeSliderDetail.value = String(v)
+        }
+
+        function onInput(value) {
             const prev = state.custExplodeFactor
-            state.custExplodeFactor = parseFloat(e.target.value)
-            explodeVal.textContent = Math.round(state.custExplodeFactor * 100) + '%'
+            state.custExplodeFactor = parseFloat(value)
+            syncExplode(state.custExplodeFactor)
 
             if (state.custViewMode === 'flat') return
 
@@ -177,39 +209,77 @@ export function createCustomizerPreview({
             } else if (state.custExplodeFactor > 0 && state.custExplodePanels.length > 0) {
                 applyExplodeFactor(state.custExplodePanels, state.custExplodeFactor)
             }
-            custControls.maxDistance = 3.0 + state.custExplodeFactor * 5.0
-        })
+            custControls.maxDistance = 4.4 + state.custExplodeFactor * 4.2
+        }
+
+        explodeSlider?.addEventListener('input', (e) => onInput(e.target.value))
+        explodeSliderDetail?.addEventListener('input', (e) => onInput(e.target.value))
+        syncExplode(state.custExplodeFactor)
     }
 
     function wireCustomizerUi() {
-        document.querySelectorAll('.design-btn').forEach(btn => {
+        document.querySelectorAll('.design-btn[data-design]').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.design-btn').forEach(b => b.classList.remove('active'))
-                btn.classList.add('active')
                 ballConfig.design = btn.dataset.design
+                document.querySelectorAll('.design-btn[data-design]').forEach(b => {
+                    b.classList.toggle('active', b.dataset.design === ballConfig.design)
+                })
                 updateBall()
             })
         })
 
         document.querySelectorAll('.view-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'))
-                btn.classList.add('active')
                 state.custViewMode = btn.dataset.view
+                document.querySelectorAll('.view-btn').forEach(b => {
+                    b.classList.toggle('active', b.dataset.view === state.custViewMode)
+                })
                 updateBall()
             })
         })
 
         document.getElementById('primary-color').addEventListener('input', (e) => {
             ballConfig.primaryColor = e.target.value
+            const mirror = document.getElementById('primary-color-detail')
+            if (mirror) mirror.value = ballConfig.primaryColor
             updateBall()
         })
 
         document.getElementById('secondary-color').addEventListener('input', (e) => {
             ballConfig.secondaryColor = e.target.value
+            const mirror = document.getElementById('secondary-color-detail')
+            if (mirror) mirror.value = ballConfig.secondaryColor
+            updateBall()
+        })
+
+        document.getElementById('primary-color-detail')?.addEventListener('input', (e) => {
+            ballConfig.primaryColor = e.target.value
+            const mirror = document.getElementById('primary-color')
+            if (mirror) mirror.value = ballConfig.primaryColor
+            updateBall()
+        })
+
+        document.getElementById('secondary-color-detail')?.addEventListener('input', (e) => {
+            ballConfig.secondaryColor = e.target.value
+            const mirror = document.getElementById('secondary-color')
+            if (mirror) mirror.value = ballConfig.secondaryColor
             updateBall()
         })
     }
+
+    if (panelRoot) {
+        const updateZoomState = () => {
+            const detailed = panelRoot.classList.contains('fullscreen')
+            panelRoot.classList.toggle('zoomed-out', detailed)
+            if (zoomStateLabel) zoomStateLabel.textContent = detailed ? 'Detailed View' : 'Focused View'
+        }
+        new MutationObserver(updateZoomState).observe(panelRoot, { attributes: true, attributeFilter: ['class'] })
+        updateZoomState()
+    }
+
+    custControls.addEventListener('change', () => {
+        if (state.custViewMode === 'ball') rememberBallCameraPose()
+    })
 
     return {
         state,
