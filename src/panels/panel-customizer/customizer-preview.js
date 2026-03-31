@@ -86,7 +86,7 @@ export function createCustomizerPreview({
     custControls.enableDamping = true
     custControls.enablePan = false
     custControls.autoRotate = true
-    custControls.autoRotateSpeed = 2.0
+    custControls.autoRotateSpeed = 10
     custControls.minDistance = 0.6
     custControls.maxDistance = 3.0
 
@@ -339,13 +339,24 @@ export function createCustomizerPreview({
         mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
         raycaster.setFromCamera(mouse, custCamera)
 
-        const intersects = raycaster.intersectObjects(previewBall.children, true)
+        // Only accept hits if the ray actually passes through the ball's visible radius
+        const ballCenter = new THREE.Vector3()
+        previewBall.getWorldPosition(ballCenter)
+        const rayToCenter = ballCenter.clone().sub(raycaster.ray.origin)
+        const projection = rayToCenter.dot(raycaster.ray.direction)
+        const closest = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(projection))
+        const distToAxis = closest.distanceTo(ballCenter)
+        const hitRadius = state.custViewMode === 'flat' ? Infinity : previewRadius * 1.15
+
         let clickedPanelIndex = null
-        for (const hit of intersects) {
-            const idx = findPanelIndex(hit.object)
-            if (idx != null) {
-                clickedPanelIndex = idx
-                break
+        if (distToAxis <= hitRadius) {
+            const intersects = raycaster.intersectObjects(previewBall.children, true)
+            for (const hit of intersects) {
+                const idx = findPanelIndex(hit.object)
+                if (idx != null) {
+                    clickedPanelIndex = idx
+                    break
+                }
             }
         }
 
@@ -360,13 +371,23 @@ export function createCustomizerPreview({
         mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
         raycaster.setFromCamera(mouse, custCamera)
 
-        const intersects = raycaster.intersectObjects(previewBall.children, true)
+        const ballCenter2 = new THREE.Vector3()
+        previewBall.getWorldPosition(ballCenter2)
+        const rayToCenter2 = ballCenter2.clone().sub(raycaster.ray.origin)
+        const projection2 = rayToCenter2.dot(raycaster.ray.direction)
+        const closest2 = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(projection2))
+        const distToAxis2 = closest2.distanceTo(ballCenter2)
+        const hitRadius2 = state.custViewMode === 'flat' ? Infinity : previewRadius * 1.15
+
         let hoveredIndex = null
-        for (const hit of intersects) {
-            const idx = findPanelIndex(hit.object)
-            if (idx != null) {
-                hoveredIndex = idx
-                break
+        if (distToAxis2 <= hitRadius2) {
+            const intersects = raycaster.intersectObjects(previewBall.children, true)
+            for (const hit of intersects) {
+                const idx = findPanelIndex(hit.object)
+                if (idx != null) {
+                    hoveredIndex = idx
+                    break
+                }
             }
         }
 
@@ -423,6 +444,10 @@ export function createCustomizerPreview({
                         fillMesh.material.color.set(color)
                         fillMesh.material.emissive.set(color)
                     }
+                }
+                // Also update stitching pentagon overlay if it exists
+                if (child.userData.stitchPanelIndex === state.selectedPanelIndex && child.isMesh) {
+                    child.material.color.set(color)
                 }
             }
         }

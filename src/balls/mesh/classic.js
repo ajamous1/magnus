@@ -39,7 +39,7 @@ export function addClassicDesign(group, config, radius) {
         const override = getPanelColor(config.design, pi)
         const pentMat = override
             ? new THREE.MeshLambertMaterial({ color: override })
-            : defaultPentMat
+            : defaultPentMat.clone()
         const center = [0, 0, 0]
         for (const idx of pent) {
             center[0] += verts[idx][0]; center[1] += verts[idx][1]; center[2] += verts[idx][2]
@@ -71,6 +71,8 @@ export function addClassicDesign(group, config, radius) {
         const geo = new THREE.BufferGeometry()
         geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
         geo.computeVertexNormals()
-        group.add(new THREE.Mesh(geo, pentMat))
+        const pentMesh = new THREE.Mesh(geo, pentMat)
+        pentMesh.userData.stitchPanelIndex = pi
+        group.add(pentMesh)
     }
 }
