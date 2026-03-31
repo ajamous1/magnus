@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { TRUNC_ICO } from '../geometry/truncated-icosahedron.js'
+import { getPanelColor } from '../panel-colors.js'
 
 export function addClassicDesign(group, config, radius) {
     const { verts, edges, pentagons } = TRUNC_ICO
@@ -24,7 +25,7 @@ export function addClassicDesign(group, config, radius) {
     }
 
     const pentR = radius * 1.002
-    const pentMat = new THREE.MeshLambertMaterial({ color: config.secondaryColor })
+    const defaultPentMat = new THREE.MeshLambertMaterial({ color: config.secondaryColor })
 
     function projSphere(x, y, z) {
         const len = Math.sqrt(x * x + y * y + z * z)
@@ -32,7 +33,13 @@ export function addClassicDesign(group, config, radius) {
     }
 
     const n = 4
-    for (const pent of pentagons) {
+    for (let pi = 0; pi < pentagons.length; pi++) {
+        const pent = pentagons[pi]
+        // Pentagons are panel indices 0..11 in the classic design
+        const override = getPanelColor(config.design, pi)
+        const pentMat = override
+            ? new THREE.MeshLambertMaterial({ color: override })
+            : defaultPentMat
         const center = [0, 0, 0]
         for (const idx of pent) {
             center[0] += verts[idx][0]; center[1] += verts[idx][1]; center[2] += verts[idx][2]

@@ -165,19 +165,19 @@ export function createCustomizerPreview({
         return null
     }
 
-    const HOVER_EMISSIVE = new THREE.Color('#1a3a5c')
     const SELECT_EMISSIVE_BOOST = 0.45
+
+    const HOVER_BLUE = new THREE.Color('#4488cc')
 
     function setHoverHighlight(panelIndex, on) {
         if (panelIndex == null || panelIndex === state.selectedPanelIndex) return
         if (state.custViewMode === 'flat') {
-            // Flat view: meshes are direct children
             for (const child of previewBall.children) {
                 if (child.userData.panelIndex === panelIndex && child.isMesh) {
                     if (on) {
                         child._savedColor = child.material.color.getHex()
                         const c = new THREE.Color(child._savedColor)
-                        c.lerp(new THREE.Color('#4488cc'), 0.2)
+                        c.lerp(HOVER_BLUE, 0.3)
                         child.material.color.set(c)
                     } else if (child._savedColor != null) {
                         child.material.color.setHex(child._savedColor)
@@ -186,21 +186,18 @@ export function createCustomizerPreview({
                 }
             }
         } else {
-            // 3D/exploded: panels are groups with fill mesh as first child
             for (const child of previewBall.children) {
                 if (child.userData.panelIndex === panelIndex && child.isGroup) {
                     const fillMesh = child.children[0]
                     if (!fillMesh || !fillMesh.material) continue
                     if (on) {
-                        fillMesh._savedEmissive = fillMesh.material.emissive.getHex()
-                        fillMesh._savedEmissiveIntensity = fillMesh.material.emissiveIntensity
-                        fillMesh.material.emissive.copy(HOVER_EMISSIVE)
-                        fillMesh.material.emissiveIntensity = 0.4
-                    } else if (fillMesh._savedEmissive != null) {
-                        fillMesh.material.emissive.setHex(fillMesh._savedEmissive)
-                        fillMesh.material.emissiveIntensity = fillMesh._savedEmissiveIntensity
-                        delete fillMesh._savedEmissive
-                        delete fillMesh._savedEmissiveIntensity
+                        fillMesh._savedColor = fillMesh.material.color.getHex()
+                        const c = new THREE.Color(fillMesh._savedColor)
+                        c.lerp(HOVER_BLUE, 0.3)
+                        fillMesh.material.color.set(c)
+                    } else if (fillMesh._savedColor != null) {
+                        fillMesh.material.color.setHex(fillMesh._savedColor)
+                        delete fillMesh._savedColor
                     }
                 }
             }
@@ -278,11 +275,12 @@ export function createCustomizerPreview({
             setSelectionHighlight(index, true)
             panelColorBtn.style.display = ''
 
-            // Set color input to panel's current color
+            // Set color input and swatch to panel's current color
+            let panelHex = '#ffffff'
             if (state.custViewMode === 'flat') {
                 for (const child of previewBall.children) {
                     if (child.userData.panelIndex === index && child.isMesh) {
-                        panelColorInput.value = '#' + child.material.color.getHexString()
+                        panelHex = '#' + child.material.color.getHexString()
                         break
                     }
                 }
@@ -290,11 +288,13 @@ export function createCustomizerPreview({
                 for (const child of previewBall.children) {
                     if (child.userData.panelIndex === index && child.isGroup) {
                         const fillMesh = child.children[0]
-                        if (fillMesh) panelColorInput.value = '#' + fillMesh.material.color.getHexString()
+                        if (fillMesh) panelHex = '#' + fillMesh.material.color.getHexString()
                         break
                     }
                 }
             }
+            panelColorInput.value = panelHex
+            panelColorBtn.style.backgroundColor = panelHex
 
             // In 3D view, stop rotation and animate camera to face panel
             if (state.custViewMode !== 'flat') {
@@ -388,18 +388,26 @@ export function createCustomizerPreview({
 
     // --- Color picker wiring ---
 
+    panelColorBtn.addEventListener('pointerdown', e => {
+        e.stopPropagation()
+    })
+    panelColorBtn.addEventListener('pointerup', e => {
+        e.stopPropagation()
+    })
     panelColorBtn.addEventListener('click', e => {
         e.stopPropagation()
         panelColorInput.click()
     })
 
+    // Live preview — just update customizer preview materials (cheap)
     panelColorInput.addEventListener('input', e => {
         if (state.selectedPanelIndex == null) return
         const color = e.target.value
         setPanelColor(ballConfig.design, state.selectedPanelIndex, color)
+        panelColorBtn.style.backgroundColor = color
         updateResetButtonVisibility()
 
-        // Update material in-place
+        // Update customizer preview materials in-place (cheap, no rebuild)
         if (state.custViewMode === 'flat') {
             for (const child of previewBall.children) {
                 if (child.userData.panelIndex === state.selectedPanelIndex && child.isMesh) {
@@ -418,8 +426,12 @@ export function createCustomizerPreview({
                 }
             }
         }
+    })
 
-        // Also update main scene ball
+    // On picker close — rebuild everything with stitching (expensive, once)
+    panelColorInput.addEventListener('change', e => {
+        if (state.selectedPanelIndex == null) return
+        // Rebuild main scene ball
         const pos = getBallGroup().position.clone()
         const rot = getBallGroup().rotation.clone()
         mainScene.remove(getBallGroup())
@@ -429,6 +441,17 @@ export function createCustomizerPreview({
         mainScene.add(next)
         setBallGroup(next)
         if (onBallChanged) onBallChanged()
+        // Rebuild customizer preview (so stitching picks up the color)
+        if (state.custViewMode !== 'flat') {
+            custScene.remove(previewBall)
+            const result = buildExplodedBall(ballConfig, previewRadius)
+            previewBall = result.group
+            state.custExplodePanels = result.panels
+            applyExplodeFactor(state.custExplodePanels, state.custExplodeFactor)
+            if (state.custExplodeFactor === 0) addStitching(previewBall, ballConfig, previewRadius)
+            custScene.add(previewBall)
+            if (state.selectedPanelIndex != null) setSelectionHighlight(state.selectedPanelIndex, true)
+        }
     })
 
     // --- Reset button ---
