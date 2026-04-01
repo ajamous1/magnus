@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Magnus</title>
-  <script type="module" crossorigin src="/assets/index-DFybw4v7.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-NKLsk9uD.css">
+  <script type="module" crossorigin src="/assets/index-C8gi5lrk.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CPDSSiXJ.css">
 </head>
 <body>
     <div class="bento-grid">
@@ -57,6 +57,7 @@
                                     <button class="design-btn" data-design="jabulani">JABULANI</button>
                                     <button class="design-btn" data-design="brazuca">BRAZUCA</button>
                                     <button class="design-btn" data-design="trionda">TRIONDA</button>
+                                    <button class="design-btn" data-design="custom">CUSTOM</button>
                                 </div>
                             </div>
                         </div>
@@ -80,37 +81,126 @@
                         </div>
                     </div>
 
-                    <div class="detailed-tray">
-                        <div class="control-group">
-                            <span class="control-label">Ball Type</span>
-                            <div class="design-buttons">
-                                <button class="design-btn active" data-design="classic">CLASSIC</button>
-                                <button class="design-btn" data-design="jabulani">JABULANI</button>
-                                <button class="design-btn" data-design="brazuca">BRAZUCA</button>
-                                <button class="design-btn" data-design="trionda">TRIONDA</button>
+                    <div class="detailed-tray garage-tray">
+                        <!-- Side panel with tabs -->
+                        <div class="garage-panel" id="garage-panel">
+                            <div class="garage-tab-bar">
+                                <button class="garage-tab active" data-tab="base">Base</button>
+                                <button class="garage-tab" data-tab="style">Style</button>
+                                <button class="garage-tab" data-tab="color">Color</button>
                             </div>
-                        </div>
 
-                        <div class="control-group">
-                            <span class="control-label">View</span>
-                            <div class="design-buttons">
-                                <button class="view-btn active" data-view="ball">3D</button>
-                                <button class="view-btn" data-view="flat">PANEL</button>
+                            <!-- BASE TAB -->
+                            <div class="garage-tab-content active" data-tab-content="base">
+                                <div class="design-cards" id="design-cards">
+                                    <button class="design-card active" data-design="classic">
+                                        <canvas class="design-card-canvas" data-design-preview="classic" width="128" height="128"></canvas>
+                                        <span class="design-card-label">Classic</span>
+                                        <span class="design-card-sub">32 panels</span>
+                                    </button>
+                                    <button class="design-card" data-design="brazuca">
+                                        <canvas class="design-card-canvas" data-design-preview="brazuca" width="128" height="128"></canvas>
+                                        <span class="design-card-label">Brazuca</span>
+                                        <span class="design-card-sub">6 panels</span>
+                                    </button>
+                                    <button class="design-card" data-design="jabulani">
+                                        <canvas class="design-card-canvas" data-design-preview="jabulani" width="128" height="128"></canvas>
+                                        <span class="design-card-label">Jabulani</span>
+                                        <span class="design-card-sub">8 panels</span>
+                                    </button>
+                                    <button class="design-card" data-design="trionda">
+                                        <canvas class="design-card-canvas" data-design-preview="trionda" width="128" height="128"></canvas>
+                                        <span class="design-card-label">Trionda</span>
+                                        <span class="design-card-sub">4 panels</span>
+                                    </button>
+                                    <button class="design-card" data-design="custom">
+                                        <canvas class="design-card-canvas" data-design-preview="custom" width="128" height="128"></canvas>
+                                        <span class="design-card-label">Custom</span>
+                                        <span class="design-card-sub">Your design</span>
+                                    </button>
+                                </div>
+
+                                <!-- Topology sub-select (shown when Custom is active) -->
+                                <div class="topology-select" id="topology-select" style="display:none">
+                                    <span class="garage-label">Panel Shape</span>
+                                    <div class="design-buttons">
+                                        <button class="topology-btn active" data-topology="cube">Propeller (6)</button>
+                                        <button class="topology-btn" data-topology="tetrahedron">Minimal (4)</button>
+                                        <button class="topology-btn" data-topology="truncated-tetrahedron">Star (8)</button>
+                                        <button class="topology-btn" data-topology="truncated-icosahedron">Classic (32)</button>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="control-group">
-                            <span class="control-label">Explosion</span>
-                            <div class="explode-row">
-                                <input type="range" id="explode-slider-detail" min="0" max="1" step="0.005" value="0">
+                            <!-- STYLE TAB -->
+                            <div class="garage-tab-content" data-tab-content="style">
+                                <div class="garage-control">
+                                    <span class="garage-label">Edge Type</span>
+                                    <div class="edge-type-cards">
+                                        <button class="edge-type-card" data-edge="straight">
+                                            <svg viewBox="0 0 48 24"><line x1="4" y1="12" x2="44" y2="12" stroke="currentColor" stroke-width="2"/></svg>
+                                            <span>Straight</span>
+                                        </button>
+                                        <button class="edge-type-card active" data-edge="scurve">
+                                            <svg viewBox="0 0 48 24"><path d="M4 12 C16 2, 20 2, 24 12 S32 22, 44 12" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                                            <span>S-Curve</span>
+                                        </button>
+                                        <button class="edge-type-card" data-edge="bow">
+                                            <svg viewBox="0 0 48 24"><path d="M4 12 Q24 2 44 12" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                                            <span>Wave</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="garage-control">
+                                    <span class="garage-label">Flow</span>
+                                    <div class="visual-slider-row">
+                                        <svg class="slider-icon" viewBox="0 0 24 12"><line x1="2" y1="6" x2="22" y2="6" stroke="currentColor" stroke-width="1.5"/></svg>
+                                        <input type="range" class="visual-slider" id="amplitude-slider" min="0" max="100" step="1" value="72">
+                                        <svg class="slider-icon" viewBox="0 0 24 12"><path d="M2 6 C8 1, 10 1, 12 6 S16 11, 22 6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+                                    </div>
+                                </div>
+
+                                <div class="garage-control">
+                                    <span class="garage-label">Edge Definition</span>
+                                    <div class="visual-slider-row">
+                                        <span class="slider-hint">Sharp</span>
+                                        <input type="range" class="visual-slider" id="sharpness-slider" min="10" max="100" step="1" value="35">
+                                        <span class="slider-hint">Smooth</span>
+                                    </div>
+                                </div>
+
+                                <div class="garage-control">
+                                    <span class="garage-label">View</span>
+                                    <div class="design-buttons">
+                                        <button class="view-btn active" data-view="ball">3D</button>
+                                        <button class="view-btn" data-view="flat">Panel</button>
+                                    </div>
+                                </div>
+
+                                <div class="garage-control">
+                                    <span class="garage-label">Explosion</span>
+                                    <input type="range" class="visual-slider" id="explode-slider-detail" min="0" max="1" step="0.005" value="0">
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="control-group">
-                            <span class="control-label">Colors</span>
-                            <div class="quick-bottom-row">
-                                <input type="color" class="color-picker square" id="primary-color-detail" value="#ffffff" title="Primary">
-                                <input type="color" class="color-picker square" id="secondary-color-detail" value="#333333" title="Secondary">
+                            <!-- COLOR TAB -->
+                            <div class="garage-tab-content" data-tab-content="color">
+                                <p class="garage-hint">Click any panel on the ball to change its color</p>
+
+                                <div class="garage-control">
+                                    <span class="garage-label">Base Colors</span>
+                                    <div class="color-pair">
+                                        <label class="color-swatch-label">
+                                            <input type="color" class="color-picker square" id="primary-color-detail" value="#ffffff">
+                                            <span>Primary</span>
+                                        </label>
+                                        <label class="color-swatch-label">
+                                            <input type="color" class="color-picker square" id="secondary-color-detail" value="#333333">
+                                            <span>Secondary</span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

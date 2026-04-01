@@ -3,6 +3,7 @@ import { addClassicDesign } from './classic.js'
 import { addJabulaniDesign } from './jabulani.js'
 import { addTriondaDesign } from './trionda.js'
 import { addBrazucaDesign } from './brazuca.js'
+import { addCustomDesign } from './custom.js'
 
 /**
  * Main in-game / preview ball: base sphere + design-specific seam geometry.
@@ -34,5 +35,7 @@ export function addStitching(group, config, radius) {
         addTriondaDesign(group, config, radius)
     } else if (config.design === 'brazuca') {
         addBrazucaDesign(group, config, radius)
+    } else if (config.design === 'custom') {
+        addCustomDesign(group, config, radius)
     }
 }

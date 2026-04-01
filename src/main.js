@@ -328,6 +328,7 @@ const customizer = createCustomizerPreview({
 const { updateBall, custScene, custCamera, custRenderer, custControls } = customizer
 customizer.wireCustomizerUi()
 customizer.wireExplodeSlider()
+customizer.garageUI.init()
 
 /**
  * Flick → kick
@@ -434,6 +435,7 @@ const tick = () => {
     custControls.update()
     customizer.debugAfterControlsUpdate()
     custRenderer.render(custScene, custCamera)
+
 
     if (kickPhysics.isKicking) {
         pushTrailPoint()

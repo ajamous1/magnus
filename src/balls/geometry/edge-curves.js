@@ -54,6 +54,68 @@ function generateSphericalSCurve(a, b, { amplitude, sharpness, segments, taperFn
 }
 
 /**
+ * Generates a bow-curved edge between two vertices on a unit sphere.
+ * Unlike S-curves, bow curves have a single bulge in one direction.
+ *
+ * @param {THREE.Vector3} a - start vertex (normalized to unit sphere)
+ * @param {THREE.Vector3} b - end vertex (normalized to unit sphere)
+ * @param {number} bow - signed amplitude of the bulge (positive = one side, negative = other)
+ * @param {number} segments - number of sample points along the edge
+ * @returns {THREE.Vector3[]} array of (segments + 1) normalized unit-sphere points
+ */
+export function generateBowCurve(a, b, bow, segments) {
+    const omega = Math.acos(Math.min(1, a.dot(b)))
+    const sinO = Math.sin(omega)
+    const edgeDir = b.clone().sub(a).normalize()
+    const points = []
+    for (let i = 0; i <= segments; i++) {
+        const t = i / segments
+        const p = a.clone().multiplyScalar(Math.sin((1 - t) * omega) / sinO)
+            .add(b.clone().multiplyScalar(Math.sin(t * omega) / sinO))
+        if (bow !== 0) {
+            const radial = p.clone().normalize()
+            const perp = new THREE.Vector3().crossVectors(radial, edgeDir).normalize()
+            p.add(perp.multiplyScalar(bow * Math.sin(Math.PI * t)))
+        }
+        p.normalize()
+        points.push(p)
+    }
+    return points
+}
+
+/**
+ * Generates bow-curved edge curves for all edges of a polyhedron.
+ * Each edge gets a single-bulge curve with the given amplitude.
+ *
+ * @param {THREE.Vector3[]} vertices - array of unit-sphere vertices
+ * @param {number[][]} edges - array of [vertexIndexA, vertexIndexB] pairs
+ * @param {number} amplitude - bow amplitude
+ * @param {number} segments - sample points per edge
+ * @returns {Map<string, THREE.Vector3[]>} edge curves keyed by "a-b" and "b-a"
+ */
+export function generateAllBowCurves(vertices, edges, amplitude, segments) {
+    const edgeCurveMap = new Map()
+    for (const [indexA, indexB] of edges) {
+        const forward = generateBowCurve(vertices[indexA], vertices[indexB], amplitude, segments)
+        edgeCurveMap.set(`${indexA}-${indexB}`, forward)
+        edgeCurveMap.set(`${indexB}-${indexA}`, [...forward].reverse())
+    }
+    return edgeCurveMap
+}
+
+/**
+ * Generates straight (great-arc) edge curves for all edges of a polyhedron.
+ *
+ * @param {THREE.Vector3[]} vertices - array of unit-sphere vertices
+ * @param {number[][]} edges - array of [vertexIndexA, vertexIndexB] pairs
+ * @param {number} segments - sample points per edge
+ * @returns {Map<string, THREE.Vector3[]>} edge curves keyed by "a-b" and "b-a"
+ */
+export function generateAllStraightCurves(vertices, edges, segments) {
+    return generateAllBowCurves(vertices, edges, 0, segments)
+}
+
+/**
  * Generates edge curves for all edges of a polyhedron and stores them
  * in a Map keyed by "vertexA-vertexB". Also stores the reverse direction.
  *
