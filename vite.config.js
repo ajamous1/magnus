@@ -1,8 +1,25 @@
-import restart from 'vite-plugin-restart'
+let restartPlugin = null
+
+try {
+    const { default: restart } = await import('vite-plugin-restart')
+    restartPlugin = restart({ restart: [ '../static/**' ] })
+} catch {
+    restartPlugin = null
+}
 
 export default {
     root: 'src/',
     publicDir: '../static/',
+    resolve:
+    {
+        alias:
+        {
+            'three': '/Users/ahmad.jamous/magnus/node_modules/three',
+            'three/examples/jsm': '/Users/ahmad.jamous/magnus/node_modules/three/examples/jsm',
+            'gsap': '/Users/ahmad.jamous/magnus/node_modules/gsap',
+            'lil-gui': '/Users/ahmad.jamous/magnus/node_modules/lil-gui'
+        }
+    },
     server:
     {
         host: true,
@@ -16,6 +33,6 @@ export default {
     },
     plugins:
     [
-        restart({ restart: [ '../static/**', ] })
+        ...restartPlugin ? [ restartPlugin ] : []
     ],
 }

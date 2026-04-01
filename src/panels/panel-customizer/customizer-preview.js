@@ -22,6 +22,10 @@ export function createCustomizerPreview({
     onBallChanged,
     cancelKick
 }) {
+    globalThis.__agentCameraLogs = globalThis.__agentCameraLogs || []
+    globalThis.__agentCameraLogs.push({ kind: 'init', data: { source: 'createCustomizerPreview' }, timestamp: Date.now() })
+    console.error('[agent-camera]', { kind: 'init', source: 'createCustomizerPreview', timestamp: Date.now() })
+
     const panelRoot = document.getElementById('panel-customizer')
     const zoomStateLabel = document.getElementById('zoom-state-label')
     const panelColorBtn = document.getElementById('panel-color-btn')
@@ -36,7 +40,11 @@ export function createCustomizerPreview({
         ballCamDirection: new THREE.Vector3(0, 0, 1),
         selectedPanelIndex: null,
         hoveredPanelIndex: null,
-        cameraAnimTarget: null
+        cameraAnimTarget: null,
+        cameraAnimTargetSpherical: null,
+        debugRunId: null,
+        debugAnimFrame: 0,
+        debugPostControlsFrame: 0
     }
 
     const custCanvas = document.querySelector('canvas.customizer-preview')
@@ -194,8 +202,25 @@ export function createCustomizerPreview({
     }
 
     const SELECT_EMISSIVE_BOOST = 0.45
+    const PANEL_CONTAINMENT_EPSILON = 1e-4
 
     const HOVER_BLUE = new THREE.Color('#4488cc')
+
+    function debugLog(runId, hypothesisId, location, message, data) {
+        if (!runId) return
+        console.log('[agent-debug] send', { runId, hypothesisId, location, message, data })
+        fetch('http://127.0.0.1:7877/ingest/395efd3b-8200-43fb-a58d-453fe40d1969', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2b54a2' }, body: JSON.stringify({ sessionId: '2b54a2', runId, hypothesisId, location, message, data, timestamp: Date.now() }) })
+            .then(() => console.log('[agent-debug] ok', { runId, hypothesisId, location, message }))
+            .catch(error => console.warn('[agent-debug] fail', { runId, hypothesisId, location, message, error: error?.message || String(error) }))
+    }
+
+    function emitAgentCameraLog(kind, data) {
+        const entry = { kind, data, timestamp: Date.now() }
+        const logStore = globalThis.__agentCameraLogs
+        logStore.push(entry)
+        if (logStore.length > 100) logStore.shift()
+        console.error('[agent-camera]', entry)
+    }
 
     function setHoverHighlight(panelIndex, on) {
         if (panelIndex == null || panelIndex === state.selectedPanelIndex) return
@@ -293,7 +318,125 @@ export function createCustomizerPreview({
         }
     }
 
+    function getBallCenterWorld() {
+        const center = new THREE.Vector3()
+        previewBall.updateMatrixWorld(true)
+        previewBall.getWorldPosition(center)
+        return center
+    }
+
+    function getRaySphereHitPoint() {
+        const hitPoint = new THREE.Vector3()
+        return raycaster.ray.intersectSphere(new THREE.Sphere(getBallCenterWorld(), previewRadius), hitPoint)
+            ? hitPoint
+            : null
+    }
+
+    function getPanelContainmentScore(hitDirLocal, panel) {
+        const boundaryDirs = panel?.boundaryDirs
+        if (!boundaryDirs || boundaryDirs.length < 3) return -Infinity
+
+        let minMargin = Infinity
+        for (let i = 0; i < boundaryDirs.length; i++) {
+            const a = boundaryDirs[i]
+            const b = boundaryDirs[(i + 1) % boundaryDirs.length]
+            const edgeNormal = new THREE.Vector3().crossVectors(a, b)
+            const centroidSide = edgeNormal.dot(panel.centroidDir)
+            if (Math.abs(centroidSide) < 1e-8) continue
+
+            const side = edgeNormal.dot(hitDirLocal) * Math.sign(centroidSide)
+            if (side < minMargin) minMargin = side
+            if (side < -PANEL_CONTAINMENT_EPSILON) return side
+        }
+
+        return minMargin
+    }
+
+    function pickClosedBallPanelFromRay() {
+        const hitPointWorld = getRaySphereHitPoint()
+        if (!hitPointWorld) return null
+
+        const hitDirLocal = previewBall.worldToLocal(hitPointWorld.clone()).normalize()
+        let bestIndex = null
+        let bestScore = -Infinity
+        const topCandidates = []
+
+        for (let i = 0; i < state.custExplodePanels.length; i++) {
+            const score = getPanelContainmentScore(hitDirLocal, state.custExplodePanels[i])
+            topCandidates.push({ index: i, score })
+            if (score > bestScore && score >= -PANEL_CONTAINMENT_EPSILON) {
+                bestIndex = i
+                bestScore = score
+            }
+        }
+
+        topCandidates.sort((a, b) => b.score - a.score)
+        const topSummary = topCandidates.slice(0, 3).map(candidate => ({
+            index: candidate.index,
+            score: Number(candidate.score.toFixed(5))
+        }))
+
+        // #region agent log
+        debugLog(state.debugRunId, 'H6', 'customizer-preview.js:pickClosedBallPanelFromRay', 'analytic panel pick', {
+            design: ballConfig.design,
+            selectedPanelIndex: state.selectedPanelIndex,
+            bestIndex,
+            bestScore: Number(bestScore.toFixed(5)),
+            hitDirLocal: hitDirLocal.toArray().map(v => Number(v.toFixed(4))),
+            topCandidates: topSummary
+        })
+        // #endregion
+        emitAgentCameraLog('analytic-pick', {
+            design: ballConfig.design,
+            bestIndex,
+            bestScore: Number(bestScore.toFixed(5)),
+            topCandidates: topSummary
+        })
+
+        if (bestIndex != null) {
+            debugHitMarker.position.copy(hitPointWorld)
+            debugHitMarker.visible = true
+            console.log(
+                `[raycast] panel=${bestIndex}, hit=(${hitPointWorld.x.toFixed(2)},${hitPointWorld.y.toFixed(2)},${hitPointWorld.z.toFixed(2)}), mode=analytic`
+            )
+        }
+
+        return bestIndex
+    }
+
+    function buildCameraAnimTarget(panel) {
+        const desiredDir = panel.centroidDir.clone().normalize()
+        const currentDir = custCamera.position.clone().normalize()
+        const angle = currentDir.angleTo(desiredDir)
+        const target = desiredDir.multiplyScalar(state.ballCamDistance)
+
+        // #region agent log
+        debugLog(state.debugRunId, 'H1', 'customizer-preview.js:buildCameraAnimTarget', 'camera target computed', {
+            selectedPanelIndex: state.selectedPanelIndex,
+            desiredPanelIndex: state.debugPendingPanelIndex ?? null,
+            angleToDesired: Number(angle.toFixed(4)),
+            currentDir: currentDir.toArray().map(v => Number(v.toFixed(4))),
+            desiredDir: panel.centroidDir.toArray().map(v => Number(v.toFixed(4))),
+            targetDir: target.clone().normalize().toArray().map(v => Number(v.toFixed(4))),
+            targetRadius: Number(target.length().toFixed(4)),
+            targetDotUp: Number(target.clone().normalize().dot(custCamera.up).toFixed(4)),
+            nearPole: Math.abs(panel.centroidDir.y) > 0.9
+        })
+        // #endregion
+        emitAgentCameraLog('target', {
+            selectedPanelIndex: state.selectedPanelIndex,
+            desiredPanelIndex: state.debugPendingPanelIndex ?? null,
+            angleToDesired: Number(angle.toFixed(4)),
+            targetDir: target.clone().normalize().toArray().map(v => Number(v.toFixed(4))),
+            targetDotUp: Number(target.clone().normalize().dot(custCamera.up).toFixed(4)),
+            nearPole: Math.abs(panel.centroidDir.y) > 0.9
+        })
+
+        return target
+    }
+
     function selectPanel(index) {
+        const previousIndex = state.selectedPanelIndex
         if (state.selectedPanelIndex != null) {
             setSelectionHighlight(state.selectedPanelIndex, false)
         }
@@ -323,7 +466,31 @@ export function createCustomizerPreview({
                 custControls.autoRotate = false
                 const panel = state.custExplodePanels[index]
                 if (panel) {
-                    state.cameraAnimTarget = panel.centroidDir.clone().multiplyScalar(state.ballCamDistance)
+                    state.debugPendingPanelIndex = index
+                    state.cameraAnimTarget = previousIndex != null && previousIndex !== index
+                        ? buildCameraAnimTarget(panel)
+                        : panel.centroidDir.clone().multiplyScalar(state.ballCamDistance)
+                    state.cameraAnimTargetSpherical = new THREE.Spherical().setFromVector3(state.cameraAnimTarget.clone())
+                    state.debugAnimFrame = 0
+                    state.debugPostControlsFrame = 0
+                    // #region agent log
+                    debugLog(state.debugRunId, 'H4', 'customizer-preview.js:selectPanel', 'selection accepted', {
+                        previousIndex,
+                        index,
+                        autoRotate: custControls.autoRotate,
+                        cameraPosition: custCamera.position.toArray().map(v => Number(v.toFixed(4))),
+                        cameraTarget: state.cameraAnimTarget.toArray().map(v => Number(v.toFixed(4))),
+                        ballCamDistance: Number(state.ballCamDistance.toFixed(4))
+                    })
+                    // #endregion
+                    emitAgentCameraLog('select', {
+                        previousIndex,
+                        index,
+                        autoRotate: custControls.autoRotate,
+                        cameraPosition: custCamera.position.toArray().map(v => Number(v.toFixed(4))),
+                        cameraTarget: state.cameraAnimTarget.toArray().map(v => Number(v.toFixed(4)))
+                    })
+                    delete state.debugPendingPanelIndex
                 }
             }
         } else {
@@ -333,6 +500,7 @@ export function createCustomizerPreview({
             if (state.custViewMode !== 'flat') {
                 custControls.autoRotate = true
                 state.cameraAnimTarget = null
+                state.cameraAnimTargetSpherical = null
             }
         }
     }
@@ -353,8 +521,7 @@ export function createCustomizerPreview({
         mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
         raycaster.setFromCamera(mouse, custCamera)
 
-        const ballCenter = new THREE.Vector3()
-        previewBall.getWorldPosition(ballCenter)
+        const ballCenter = getBallCenterWorld()
         const rayToCenter = ballCenter.clone().sub(raycaster.ray.origin)
         const projection = rayToCenter.dot(raycaster.ray.direction)
         const closest = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(projection))
@@ -366,10 +533,20 @@ export function createCustomizerPreview({
             return null
         }
 
-        const camDist = custCamera.position.length()
+        if (state.custViewMode !== 'flat' && state.custExplodeFactor === 0 && ballConfig.design === 'classic') {
+            const analyticPanelIndex = pickClosedBallPanelFromRay()
+            if (analyticPanelIndex != null) return analyticPanelIndex
+            debugHitMarker.visible = false
+            return null
+        }
+
+        const cameraDir = custCamera.position.clone().sub(ballCenter).normalize()
         const intersects = raycaster.intersectObjects(getPanelMeshes(), false)
         for (const hit of intersects) {
-            if (state.custViewMode !== 'flat' && hit.distance > camDist) continue
+            if (state.custViewMode !== 'flat') {
+                const hitDir = hit.point.clone().sub(ballCenter).normalize()
+                if (hitDir.dot(cameraDir) <= 0) continue
+            }
             const idx = findPanelIndex(hit.object)
             if (idx != null) {
                 debugHitMarker.position.copy(hit.point)
@@ -383,8 +560,26 @@ export function createCustomizerPreview({
     }
 
     custCanvas.addEventListener('pointerdown', e => {
+        state.debugRunId = `run-${Date.now()}`
         pointerDownPos = { x: e.clientX, y: e.clientY }
         pointerDownResult = doRaycast(e)
+        const spherical = new THREE.Spherical().setFromVector3(custCamera.position)
+        // #region agent log
+        debugLog(state.debugRunId, 'H5', 'customizer-preview.js:pointerdown', 'pointerdown raycast result', {
+            clientX: e.clientX,
+            clientY: e.clientY,
+            result: pointerDownResult,
+            selectedPanelIndex: state.selectedPanelIndex,
+            hoveredPanelIndex: state.hoveredPanelIndex,
+            autoRotate: custControls.autoRotate,
+            cameraPosition: custCamera.position.toArray().map(v => Number(v.toFixed(4))),
+            spherical: {
+                radius: Number(spherical.radius.toFixed(4)),
+                phi: Number(spherical.phi.toFixed(4)),
+                theta: Number(spherical.theta.toFixed(4))
+            }
+        })
+        // #endregion
         console.log(`[click] pointerdown → panel ${pointerDownResult}`)
     })
 
@@ -514,15 +709,80 @@ export function createCustomizerPreview({
     // --- Camera animation (lerp toward selected panel) ---
 
     function animateCamera() {
-        if (state.cameraAnimTarget && state.custViewMode !== 'flat') {
-            custCamera.position.lerp(state.cameraAnimTarget, 0.08)
+        if (state.cameraAnimTarget && state.cameraAnimTargetSpherical && state.custViewMode !== 'flat') {
+            const beforePos = custCamera.position.clone()
+            const currentSpherical = new THREE.Spherical().setFromVector3(custCamera.position)
+            const targetSpherical = state.cameraAnimTargetSpherical
+            const thetaDelta = Math.atan2(
+                Math.sin(targetSpherical.theta - currentSpherical.theta),
+                Math.cos(targetSpherical.theta - currentSpherical.theta)
+            )
+
+            currentSpherical.radius += (targetSpherical.radius - currentSpherical.radius) * 0.08
+            currentSpherical.phi += (targetSpherical.phi - currentSpherical.phi) * 0.08
+            currentSpherical.theta += thetaDelta * 0.08
+            currentSpherical.makeSafe()
+            custCamera.position.setFromSpherical(currentSpherical)
             custCamera.lookAt(0, 0, 0)
             const dist = custCamera.position.distanceTo(state.cameraAnimTarget)
+            if (state.debugAnimFrame < 8) {
+                const beforeSpherical = new THREE.Spherical().setFromVector3(beforePos)
+                const afterSpherical = new THREE.Spherical().setFromVector3(custCamera.position)
+                // #region agent log
+                debugLog(state.debugRunId, 'H1', 'customizer-preview.js:animateCamera', 'animateCamera frame', {
+                    frame: state.debugAnimFrame,
+                    distanceToTarget: Number(dist.toFixed(4)),
+                    radiusBefore: Number(beforePos.length().toFixed(4)),
+                    radiusAfter: Number(custCamera.position.length().toFixed(4)),
+                    angleStep: Number(beforePos.angleTo(custCamera.position).toFixed(4)),
+                    phiBefore: Number(beforeSpherical.phi.toFixed(4)),
+                    phiAfter: Number(afterSpherical.phi.toFixed(4)),
+                    thetaBefore: Number(beforeSpherical.theta.toFixed(4)),
+                    thetaAfter: Number(afterSpherical.theta.toFixed(4))
+                })
+                // #endregion
+                emitAgentCameraLog('anim', {
+                    frame: state.debugAnimFrame,
+                    distanceToTarget: Number(dist.toFixed(4)),
+                    radiusBefore: Number(beforePos.length().toFixed(4)),
+                    radiusAfter: Number(custCamera.position.length().toFixed(4)),
+                    phiBefore: Number(beforeSpherical.phi.toFixed(4)),
+                    phiAfter: Number(afterSpherical.phi.toFixed(4)),
+                    thetaBefore: Number(beforeSpherical.theta.toFixed(4)),
+                    thetaAfter: Number(afterSpherical.theta.toFixed(4))
+                })
+                state.debugAnimFrame += 1
+            }
             if (dist < 0.01) {
                 custCamera.position.copy(state.cameraAnimTarget)
                 state.cameraAnimTarget = null
+                state.cameraAnimTargetSpherical = null
             }
         }
+    }
+
+    function debugAfterControlsUpdate() {
+        if (!state.cameraAnimTarget || state.custViewMode === 'flat' || state.debugPostControlsFrame >= 8) return
+        const spherical = new THREE.Spherical().setFromVector3(custCamera.position)
+        // #region agent log
+        debugLog(state.debugRunId, 'H3', 'customizer-preview.js:debugAfterControlsUpdate', 'post-controls camera state', {
+            frame: state.debugPostControlsFrame,
+            autoRotate: custControls.autoRotate,
+            radius: Number(spherical.radius.toFixed(4)),
+            phi: Number(spherical.phi.toFixed(4)),
+            theta: Number(spherical.theta.toFixed(4)),
+            distanceToTarget: Number(custCamera.position.distanceTo(state.cameraAnimTarget).toFixed(4))
+        })
+        // #endregion
+        emitAgentCameraLog('controls', {
+            frame: state.debugPostControlsFrame,
+            autoRotate: custControls.autoRotate,
+            radius: Number(spherical.radius.toFixed(4)),
+            phi: Number(spherical.phi.toFixed(4)),
+            theta: Number(spherical.theta.toFixed(4)),
+            distanceToTarget: Number(custCamera.position.distanceTo(state.cameraAnimTarget).toFixed(4))
+        })
+        state.debugPostControlsFrame += 1
     }
 
     // --- Main updateBall ---
@@ -695,6 +955,7 @@ export function createCustomizerPreview({
         updateBall,
         wireExplodeSlider,
         wireCustomizerUi,
-        animateCamera
+        animateCamera,
+        debugAfterControlsUpdate
     }
 }

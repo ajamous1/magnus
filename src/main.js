@@ -20,6 +20,10 @@ import { createKickShot } from './panels/panel-shooter/kick-shot.js'
 import { createCustomizerPreview } from './panels/panel-customizer/customizer-preview.js'
 import { initBentoResize, initPanelFullscreen } from './ui/bentoGrid.js'
 
+globalThis.__agentBundleStamp = '2b54a2-main-v1'
+globalThis.__agentCameraLogs = globalThis.__agentCameraLogs || []
+console.error('[agent-bundle]', { stamp: globalThis.__agentBundleStamp, timestamp: Date.now() })
+
 const debugParams = createDebugParams()
 
 const canvas = document.querySelector('canvas.webgl')
@@ -428,6 +432,7 @@ const tick = () => {
 
     customizer.animateCamera()
     custControls.update()
+    customizer.debugAfterControlsUpdate()
     custRenderer.render(custScene, custCamera)
 
     if (kickPhysics.isKicking) {

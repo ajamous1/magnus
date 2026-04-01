@@ -106,7 +106,7 @@ export function buildExplodedBall(config, radius) {
     })
     const borderMat = new THREE.LineBasicMaterial({ color: config.secondaryColor })
 
-    function addPanel(uvecs, fillColor) {
+    function addPanel(uvecs, fillColor, boundaryDirs = uvecs) {
         const mat = fillColor === 'black' ? pentFillMat.clone() : fillMat.clone()
         let cx = 0, cy = 0, cz = 0
         uvecs.forEach(v => { cx += v.x; cy += v.y; cz += v.z })
@@ -116,7 +116,12 @@ export function buildExplodedBall(config, radius) {
         pg.add(buildSphericalPanel(uvecs, radius, mat))
         pg.add(buildPanelBorder(uvecs, radius, borderMat))
         group.add(pg)
-        panels.push({ mesh: pg, centroidDir, baseRadius: radius })
+        panels.push({
+            mesh: pg,
+            centroidDir,
+            baseRadius: radius,
+            boundaryDirs: boundaryDirs.map(v => v.clone().normalize())
+        })
     }
 
     if (config.design === 'classic') {
@@ -136,7 +141,12 @@ export function buildExplodedBall(config, radius) {
                 boundary, centroidDir, panelRadius, borderRadius: radius * 1.001, fillMat, borderMat
             })
             group.add(panelGroup)
-            panels.push({ mesh: panelGroup, centroidDir, baseRadius: radius })
+            panels.push({
+                mesh: panelGroup,
+                centroidDir,
+                baseRadius: radius,
+                boundaryDirs: boundary.map(v => v.clone().normalize())
+            })
         })
 
     } else if (config.design === 'brazuca') {
@@ -150,7 +160,12 @@ export function buildExplodedBall(config, radius) {
                 boundary, centroidDir, panelRadius, borderRadius: radius * 1.001, fillMat, borderMat
             })
             group.add(panelGroup)
-            panels.push({ mesh: panelGroup, centroidDir, baseRadius: radius })
+            panels.push({
+                mesh: panelGroup,
+                centroidDir,
+                baseRadius: radius,
+                boundaryDirs: boundary.map(v => v.clone().normalize())
+            })
         })
 
     } else if (config.design === 'trionda') {
@@ -164,7 +179,12 @@ export function buildExplodedBall(config, radius) {
                 boundary, centroidDir, panelRadius, borderRadius: radius * 1.001, fillMat, borderMat
             })
             group.add(panelGroup)
-            panels.push({ mesh: panelGroup, centroidDir, baseRadius: radius })
+            panels.push({
+                mesh: panelGroup,
+                centroidDir,
+                baseRadius: radius,
+                boundaryDirs: boundary.map(v => v.clone().normalize())
+            })
         })
     }
 
