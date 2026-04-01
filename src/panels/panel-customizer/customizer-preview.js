@@ -6,7 +6,7 @@ import {
     applyExplodeFactor,
     addStitching
 } from '../../balls/index.js'
-import { setPanelColor, clearPanelColors, hasOverrides } from '../../balls/panel-colors.js'
+import { getPanelColor, setPanelColor, clearPanelColors, hasOverrides } from '../../balls/panel-colors.js'
 
 /**
  * 3D / exploded / flat preview for the ball customizer (panel-customizer).
@@ -57,6 +57,14 @@ export function createCustomizerPreview({
     const raycaster = new THREE.Raycaster()
     const mouse = new THREE.Vector2()
 
+    // Debug: visual hit marker
+    const debugHitMarker = new THREE.Mesh(
+        new THREE.SphereGeometry(0.02, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    )
+    debugHitMarker.visible = false
+    custScene.add(debugHitMarker)
+
     // Build initial preview ball using panel-based mesh
     function buildPanelBall() {
         const result = buildExplodedBall(ballConfig, previewRadius)
@@ -86,7 +94,7 @@ export function createCustomizerPreview({
     custControls.enableDamping = true
     custControls.enablePan = false
     custControls.autoRotate = true
-    custControls.autoRotateSpeed = 10
+    custControls.autoRotateSpeed = 5
     custControls.minDistance = 0.6
     custControls.maxDistance = 3.0
 
@@ -163,6 +171,26 @@ export function createCustomizerPreview({
             current = current.parent
         }
         return null
+    }
+
+    /** Get only panel fill meshes (not lines or stitching) for raycasting */
+    function getPanelMeshes() {
+        const meshes = []
+        if (!previewBall) return meshes
+        for (const child of previewBall.children) {
+            if (child.userData.panelIndex == null) continue
+            if (child.isMesh) {
+                meshes.push(child)
+            } else if (child.isGroup) {
+                // Panel groups: first child is the fill mesh, second is the border line
+                for (const sub of child.children) {
+                    if (sub.isMesh) {
+                        meshes.push(sub)
+                    }
+                }
+            }
+        }
+        return meshes
     }
 
     const SELECT_EMISSIVE_BOOST = 0.45
@@ -275,23 +303,17 @@ export function createCustomizerPreview({
             setSelectionHighlight(index, true)
             panelColorBtn.style.display = ''
 
-            // Set color input and swatch to panel's current color
-            let panelHex = '#ffffff'
-            if (state.custViewMode === 'flat') {
-                for (const child of previewBall.children) {
-                    if (child.userData.panelIndex === index && child.isMesh) {
-                        panelHex = '#' + child.material.color.getHexString()
-                        break
-                    }
-                }
+            // Set color input and swatch to panel's true color (not tinted by hover)
+            const override = getPanelColor(ballConfig.design, index)
+            let panelHex
+            if (override) {
+                panelHex = override
             } else {
-                for (const child of previewBall.children) {
-                    if (child.userData.panelIndex === index && child.isGroup) {
-                        const fillMesh = child.children[0]
-                        if (fillMesh) panelHex = '#' + fillMesh.material.color.getHexString()
-                        break
-                    }
-                }
+                // Determine default color based on design and panel type
+                // Classic: panels 0-11 are pentagons (secondary), 12+ are hexagons (primary)
+                // Other designs: all panels use primary
+                const isPent = ballConfig.design === 'classic' && index < 12
+                panelHex = isPent ? ballConfig.secondaryColor : ballConfig.primaryColor
             }
             panelColorInput.value = panelHex
             panelColorBtn.style.backgroundColor = panelHex
@@ -322,24 +344,15 @@ export function createCustomizerPreview({
     // --- Raycaster click detection ---
 
     let pointerDownPos = null
+    let pointerDownResult = null
+    let lastSelectTime = 0
 
-    custCanvas.addEventListener('pointerdown', e => {
-        pointerDownPos = { x: e.clientX, y: e.clientY }
-    })
-
-    custCanvas.addEventListener('pointerup', e => {
-        if (!pointerDownPos) return
-        const dx = e.clientX - pointerDownPos.x
-        const dy = e.clientY - pointerDownPos.y
-        pointerDownPos = null
-        if (Math.sqrt(dx * dx + dy * dy) > 5) return
-
+    function doRaycast(e) {
         const rect = custCanvas.getBoundingClientRect()
         mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
         mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
         raycaster.setFromCamera(mouse, custCamera)
 
-        // Only accept hits if the ray actually passes through the ball's visible radius
         const ballCenter = new THREE.Vector3()
         previewBall.getWorldPosition(ballCenter)
         const rayToCenter = ballCenter.clone().sub(raycaster.ray.origin)
@@ -348,48 +361,57 @@ export function createCustomizerPreview({
         const distToAxis = closest.distanceTo(ballCenter)
         const hitRadius = state.custViewMode === 'flat' ? Infinity : previewRadius * 1.15
 
-        let clickedPanelIndex = null
-        if (distToAxis <= hitRadius) {
-            const intersects = raycaster.intersectObjects(previewBall.children, true)
-            for (const hit of intersects) {
-                const idx = findPanelIndex(hit.object)
-                if (idx != null) {
-                    clickedPanelIndex = idx
-                    break
-                }
-            }
+        if (distToAxis > hitRadius) {
+            debugHitMarker.visible = false
+            return null
         }
 
-        selectPanel(clickedPanelIndex)
+        const camDist = custCamera.position.length()
+        const intersects = raycaster.intersectObjects(getPanelMeshes(), false)
+        for (const hit of intersects) {
+            if (state.custViewMode !== 'flat' && hit.distance > camDist) continue
+            const idx = findPanelIndex(hit.object)
+            if (idx != null) {
+                debugHitMarker.position.copy(hit.point)
+                debugHitMarker.visible = true
+                console.log(`[raycast] panel=${idx}, hit=(${hit.point.x.toFixed(2)},${hit.point.y.toFixed(2)},${hit.point.z.toFixed(2)}), dist=${hit.distance.toFixed(3)}`)
+                return idx
+            }
+        }
+        debugHitMarker.visible = false
+        return null
+    }
+
+    custCanvas.addEventListener('pointerdown', e => {
+        pointerDownPos = { x: e.clientX, y: e.clientY }
+        pointerDownResult = doRaycast(e)
+        console.log(`[click] pointerdown → panel ${pointerDownResult}`)
+    })
+
+    custCanvas.addEventListener('pointerup', e => {
+        if (!pointerDownPos) return
+        const dx = e.clientX - pointerDownPos.x
+        const dy = e.clientY - pointerDownPos.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        pointerDownPos = null
+        if (dist > 5) {
+            pointerDownResult = null
+            return
+        }
+        if (pointerDownResult === state.selectedPanelIndex && pointerDownResult != null) {
+            pointerDownResult = null
+            return
+        }
+        console.log(`[click] pointerup ACCEPTED → selecting panel ${pointerDownResult} (was: ${state.selectedPanelIndex})`)
+        selectPanel(pointerDownResult)
+        pointerDownResult = null
     })
 
     // --- Hover highlight ---
 
     custCanvas.addEventListener('pointermove', e => {
-        const rect = custCanvas.getBoundingClientRect()
-        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-        raycaster.setFromCamera(mouse, custCamera)
-
-        const ballCenter2 = new THREE.Vector3()
-        previewBall.getWorldPosition(ballCenter2)
-        const rayToCenter2 = ballCenter2.clone().sub(raycaster.ray.origin)
-        const projection2 = rayToCenter2.dot(raycaster.ray.direction)
-        const closest2 = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(projection2))
-        const distToAxis2 = closest2.distanceTo(ballCenter2)
-        const hitRadius2 = state.custViewMode === 'flat' ? Infinity : previewRadius * 1.15
-
-        let hoveredIndex = null
-        if (distToAxis2 <= hitRadius2) {
-            const intersects = raycaster.intersectObjects(previewBall.children, true)
-            for (const hit of intersects) {
-                const idx = findPanelIndex(hit.object)
-                if (idx != null) {
-                    hoveredIndex = idx
-                    break
-                }
-            }
-        }
+        const hoveredIndex = doRaycast(e)
+        debugHitMarker.visible = false // don't show marker on hover
 
         if (hoveredIndex !== state.hoveredPanelIndex) {
             setHoverHighlight(state.hoveredPanelIndex, false)
@@ -508,6 +530,7 @@ export function createCustomizerPreview({
     function updateBall() {
         if (state.custViewMode === 'ball' || state.custViewMode !== 'flat') rememberBallCameraPose()
 
+        // Rebuild main scene ball + spin ball immediately after customizer
         const pos = getBallGroup().position.clone()
         const rot = getBallGroup().rotation.clone()
         mainScene.remove(getBallGroup())
@@ -516,6 +539,7 @@ export function createCustomizerPreview({
         next.rotation.copy(rot)
         mainScene.add(next)
         setBallGroup(next)
+        if (onBallChanged) onBallChanged()
 
         custScene.remove(previewBall)
         if (state.custViewMode === 'flat') {
@@ -555,7 +579,6 @@ export function createCustomizerPreview({
         }
 
         updateResetButtonVisibility()
-        if (onBallChanged) onBallChanged()
     }
 
     function wireExplodeSlider() {

@@ -231,8 +231,10 @@ amGroup.visible = false
 spinScene.add(amGroup)
 
 function rebuildSpinBall() {
+    const rot = spinBall.rotation.clone()
     spinScene.remove(spinBall)
     spinBall = buildMainBallForPreview(spinRadius)
+    spinBall.rotation.copy(rot)
     spinScene.add(spinBall)
 }
 
