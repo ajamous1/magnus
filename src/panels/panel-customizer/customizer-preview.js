@@ -198,13 +198,15 @@ export function createCustomizerPreview({
             for (const child of previewBall.children) {
                 if (child.userData.panelIndex === panelIndex && child.isMesh) {
                     if (on) {
-                        child._savedColor = child.material.color.getHex()
-                        const c = new THREE.Color(child._savedColor)
+                        if (child._savedHoverColor == null) {
+                            child._savedHoverColor = child.material.color.getHex()
+                        }
+                        const c = new THREE.Color(child._savedHoverColor)
                         c.lerp(HOVER_BLUE, 0.3)
                         child.material.color.set(c)
-                    } else if (child._savedColor != null) {
-                        child.material.color.setHex(child._savedColor)
-                        delete child._savedColor
+                    } else if (child._savedHoverColor != null) {
+                        child.material.color.setHex(child._savedHoverColor)
+                        delete child._savedHoverColor
                     }
                 }
             }
@@ -214,13 +216,15 @@ export function createCustomizerPreview({
                     const fillMesh = child.children[0]
                     if (!fillMesh || !fillMesh.material) continue
                     if (on) {
-                        fillMesh._savedColor = fillMesh.material.color.getHex()
-                        const c = new THREE.Color(fillMesh._savedColor)
+                        if (fillMesh._savedHoverColor == null) {
+                            fillMesh._savedHoverColor = fillMesh.material.color.getHex()
+                        }
+                        const c = new THREE.Color(fillMesh._savedHoverColor)
                         c.lerp(HOVER_BLUE, 0.3)
                         fillMesh.material.color.set(c)
-                    } else if (fillMesh._savedColor != null) {
-                        fillMesh.material.color.setHex(fillMesh._savedColor)
-                        delete fillMesh._savedColor
+                    } else if (fillMesh._savedHoverColor != null) {
+                        fillMesh.material.color.setHex(fillMesh._savedHoverColor)
+                        delete fillMesh._savedHoverColor
                     }
                 }
             }
@@ -346,8 +350,36 @@ export function createCustomizerPreview({
         return desiredDir.multiplyScalar(state.ballCamDistance)
     }
 
+    function clearHoverTint(panelIndex) {
+        if (panelIndex == null) return
+        if (state.custViewMode === 'flat') {
+            for (const child of previewBall.children) {
+                if (child.userData.panelIndex === panelIndex && child.isMesh && child._savedHoverColor != null) {
+                    child.material.color.setHex(child._savedHoverColor)
+                    delete child._savedHoverColor
+                }
+            }
+        } else {
+            for (const child of previewBall.children) {
+                if (child.userData.panelIndex === panelIndex && child.isGroup) {
+                    const fillMesh = child.children[0]
+                    if (fillMesh?._savedHoverColor != null) {
+                        fillMesh.material.color.setHex(fillMesh._savedHoverColor)
+                        delete fillMesh._savedHoverColor
+                    }
+                }
+            }
+        }
+    }
+
     function selectPanel(index) {
         const previousIndex = state.selectedPanelIndex
+
+        if (state.hoveredPanelIndex != null) {
+            clearHoverTint(state.hoveredPanelIndex)
+            state.hoveredPanelIndex = null
+        }
+
         if (state.selectedPanelIndex != null) {
             setSelectionHighlight(state.selectedPanelIndex, false)
         }

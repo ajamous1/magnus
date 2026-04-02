@@ -50,13 +50,9 @@ export function addClassicFlatLayout(group, config, helpers) {
         }
     }
 
-    const pentFlatMat = new THREE.MeshBasicMaterial({ color: config.secondaryColor, side: THREE.DoubleSide })
     allFaces.forEach((face, idx) => {
         if (!netPts[face.id]) return
         const override = getPanelColor(config.design, idx)
-        drawPanel(netPts[face.id], face.vIdxs, () => 'straight', idx, override)
-        if (face.isPent && !override) {
-            group.children[group.children.length - 2].material = pentFlatMat
-        }
+        drawPanel(netPts[face.id], face.vIdxs, () => 'straight', idx, override || (face.isPent ? config.secondaryColor : undefined))
     })
 }
