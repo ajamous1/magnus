@@ -7,8 +7,7 @@ import {
     addStitching
 } from '../../balls/index.js'
 import { getPanelColor, setPanelColor, clearPanelColors, hasOverrides } from '../../balls/panel-colors.js'
-import { DESIGN_TO_CUSTOM_PRESET } from '../../balls/config.js'
-import { createGarageUI } from './garage-ui.js'
+import { createStudioUI } from './studio-ui.js'
 
 /**
  * 3D / exploded / flat preview for the ball customizer (panel-customizer).
@@ -582,6 +581,13 @@ export function createCustomizerPreview({
             pointerDownResult = null
             return
         }
+
+        // Let studio tools (fill, symmetric fill) handle the click first
+        if (studioUI && pointerDownResult != null && studioUI.handlePanelClick(pointerDownResult)) {
+            pointerDownResult = null
+            return
+        }
+
         if (pointerDownResult === state.selectedPanelIndex && pointerDownResult != null) {
             pointerDownResult = null
             return
@@ -868,109 +874,23 @@ export function createCustomizerPreview({
         syncExplode(state.custExplodeFactor)
     }
 
-    function syncCustomDesignerUI() {
-        const designer = document.getElementById('custom-designer')
-        if (!designer) return
-        designer.style.display = ballConfig.design === 'custom' ? '' : 'none'
-        if (ballConfig.design !== 'custom') return
-
-        const c = ballConfig.custom
-        // Topology buttons
-        document.querySelectorAll('.topology-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.topology === c.topology)
-        })
-        // Edge style buttons
-        document.querySelectorAll('.edge-style-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.edge === c.edgeStyle)
-        })
-        // Sliders
-        const ampSlider = document.getElementById('amplitude-slider')
-        const sharpSlider = document.getElementById('sharpness-slider')
-        if (ampSlider) ampSlider.value = Math.round(c.amplitude * 100)
-        if (sharpSlider) sharpSlider.value = Math.round(c.sharpness * 100)
-        const ampVal = document.getElementById('amplitude-value')
-        const sharpVal = document.getElementById('sharpness-value')
-        if (ampVal) ampVal.textContent = Math.round(c.amplitude * 100) + '%'
-        if (sharpVal) sharpVal.textContent = Math.round(c.sharpness * 100) + '%'
-
-        // Disable edge controls for classic topology
-        const isClassic = c.topology === 'truncated-icosahedron'
-        document.querySelectorAll('.edge-style-btn').forEach(b => b.disabled = isClassic)
-        if (ampSlider) ampSlider.disabled = isClassic
-        if (sharpSlider) sharpSlider.disabled = isClassic
-    }
 
     function wireCustomizerUi() {
-        let lastStandardDesign = 'brazuca'
-
         document.querySelectorAll('.design-btn[data-design]').forEach(btn => {
             btn.addEventListener('click', () => {
-                const newDesign = btn.dataset.design
-
-                // When switching to custom, prefill from the last standard design
-                if (newDesign === 'custom' && ballConfig.design !== 'custom') {
-                    lastStandardDesign = ballConfig.design
-                    const preset = DESIGN_TO_CUSTOM_PRESET[lastStandardDesign]
-                    if (preset) Object.assign(ballConfig.custom, preset)
-                }
-
-                ballConfig.design = newDesign
+                ballConfig.design = btn.dataset.design
                 document.querySelectorAll('.design-btn[data-design]').forEach(b => {
                     b.classList.toggle('active', b.dataset.design === ballConfig.design)
                 })
-                syncCustomDesignerUI()
+                // Sync studio preset buttons
+                document.querySelectorAll('.studio-preset').forEach(b => {
+                    b.classList.toggle('active', b.dataset.design === ballConfig.design)
+                })
                 selectPanel(null)
                 updateBall()
+                // Re-render patterns for the new design
+                if (studioUI) studioUI.renderPatterns()
             })
-        })
-
-        // Custom designer: topology buttons
-        document.querySelectorAll('.topology-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                ballConfig.custom.topology = btn.dataset.topology
-                // Reset edge style for classic topology
-                if (btn.dataset.topology === 'truncated-icosahedron') {
-                    ballConfig.custom.edgeStyle = 'straight'
-                    ballConfig.custom.amplitude = 0
-                }
-                syncCustomDesignerUI()
-                selectPanel(null)
-                updateBall()
-            })
-        })
-
-        // Custom designer: edge style buttons
-        document.querySelectorAll('.edge-style-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                ballConfig.custom.edgeStyle = btn.dataset.edge
-                if (btn.dataset.edge === 'straight') {
-                    ballConfig.custom.amplitude = 0
-                } else if (ballConfig.custom.amplitude === 0) {
-                    // Restore a sensible default when switching away from straight
-                    ballConfig.custom.amplitude = btn.dataset.edge === 'bow' ? 0.18 : 0.5
-                }
-                syncCustomDesignerUI()
-                selectPanel(null)
-                updateBall()
-            })
-        })
-
-        // Custom designer: amplitude slider
-        document.getElementById('amplitude-slider')?.addEventListener('input', e => {
-            ballConfig.custom.amplitude = parseInt(e.target.value) / 100
-            const val = document.getElementById('amplitude-value')
-            if (val) val.textContent = e.target.value + '%'
-            selectPanel(null)
-            updateBall()
-        })
-
-        // Custom designer: sharpness slider
-        document.getElementById('sharpness-slider')?.addEventListener('input', e => {
-            ballConfig.custom.sharpness = parseInt(e.target.value) / 100
-            const val = document.getElementById('sharpness-value')
-            if (val) val.textContent = e.target.value + '%'
-            selectPanel(null)
-            updateBall()
         })
 
         document.querySelectorAll('.view-btn').forEach(btn => {
@@ -1027,16 +947,10 @@ export function createCustomizerPreview({
         if (state.custViewMode === 'ball') rememberBallCameraPose()
     })
 
-    // --- Garage UI (fullscreen only) ---
-    const garageUI = createGarageUI({
-        ballConfig,
-        previewRadius,
-        updateBall,
-        selectPanel,
-        syncCustomDesignerUI
-    })
+    const studioUI = createStudioUI({ ballConfig, updateBall, selectPanel })
 
     return {
+        studioUI,
         state,
         custScene,
         custCamera,
@@ -1046,7 +960,6 @@ export function createCustomizerPreview({
         wireExplodeSlider,
         wireCustomizerUi,
         animateCamera,
-        debugAfterControlsUpdate,
-        garageUI
+        debugAfterControlsUpdate
     }
 }

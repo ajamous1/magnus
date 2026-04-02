@@ -5,7 +5,6 @@ import { BRAZUCA_VERTICES, BRAZUCA_FACES, BRAZUCA_EDGES, generateBrazucaEdgeCurv
 import { TRIONDA_VERTICES, TRIONDA_FACES, TRIONDA_EDGES, generateTriondaEdgeCurves } from './geometry/trionda-geometry.js'
 import { JABULANI_VERTICES, JABULANI_FACES, generateJabulaniEdgeCurves } from './geometry/jabulani-geometry.js'
 import { getPanelColor } from './panel-colors.js'
-import { generateCustomGeometry } from './geometry/custom-geometry.js'
 
 // --- Shared panel-building helpers for S-curve designs (Brazuca, Trionda) ---
 
@@ -188,32 +187,6 @@ export function buildExplodedBall(config, radius) {
             })
         })
 
-    } else if (config.design === 'custom') {
-        const geo = generateCustomGeometry(config.custom)
-
-        if (geo.isClassicTopology) {
-            // Classic topology: use the same buildSphericalPanel path
-            const { verts, pentagons, hexFaces } = TRUNC_ICO
-            const v3d = verts.map(v => new THREE.Vector3(v[0], v[1], v[2]))
-            pentagons.forEach(pf => addPanel(pf.map(i => v3d[i]), 'black'))
-            hexFaces.forEach(hf => addPanel(hf.map(i => v3d[i])))
-        } else {
-            const panelRadius = radius * 0.9995
-            geo.faces.forEach(faceVertexIndices => {
-                const boundary = buildBoundaryLoop(faceVertexIndices, geo.edgeCurveMap)
-                const centroidDir = computeFaceCentroid(faceVertexIndices, geo.vertices)
-                const panelGroup = buildConvexFanPanel({
-                    boundary, centroidDir, panelRadius, borderRadius: radius * 1.001, fillMat, borderMat
-                })
-                group.add(panelGroup)
-                panels.push({
-                    mesh: panelGroup,
-                    centroidDir,
-                    baseRadius: radius,
-                    boundaryDirs: boundary.map(v => v.clone().normalize())
-                })
-            })
-        }
     }
 
     panels.forEach((panel, i) => {

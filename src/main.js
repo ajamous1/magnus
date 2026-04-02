@@ -328,7 +328,7 @@ const customizer = createCustomizerPreview({
 const { updateBall, custScene, custCamera, custRenderer, custControls } = customizer
 customizer.wireCustomizerUi()
 customizer.wireExplodeSlider()
-customizer.garageUI.init()
+customizer.studioUI.init()
 
 /**
  * Flick → kick
