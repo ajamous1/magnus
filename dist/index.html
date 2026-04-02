@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Magnus</title>
-  <script type="module" crossorigin src="/magnus/assets/index-DFjK8Fz8.js"></script>
-  <link rel="stylesheet" crossorigin href="/magnus/assets/index-DrDpj2BS.css">
+  <script type="module" crossorigin src="/magnus/assets/index-BgWSDkzs.js"></script>
+  <link rel="stylesheet" crossorigin href="/magnus/assets/index-CXg18esl.css">
 </head>
 <body>
     <div class="bento-grid">
@@ -31,6 +31,10 @@
                 <!-- Mobile edit mode button -->
                 <button class="edit-mode-btn" id="edit-mode-btn" title="Edit ball design">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                </button>
+                <!-- Mobile spin preview button -->
+                <button class="spin-mode-btn" id="spin-mode-btn" title="Spin preview">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10"/><path d="M2 12h20"/></svg>
                 </button>
             </div>
             <div class="resize-handle resize-v"></div>
@@ -178,6 +182,7 @@
         <div class="resize-handle resize-h"></div>
         <div class="bento-row" id="bottom-row">
             <div class="bento-panel" id="panel-spin-preview">
+                <button class="spin-mode-done" id="spin-mode-done">Done</button>
                 <button class="panel-fs-btn" title="Toggle fullscreen">
                     <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>

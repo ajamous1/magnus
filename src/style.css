@@ -137,7 +137,7 @@ body {
     display: none;
     position: absolute;
     top: 10px;
-    right: 46px;
+    right: 10px;
     z-index: 9;
     width: 34px;
     height: 34px;
@@ -1177,6 +1177,66 @@ body {
     transform: scale(1.05);
 }
 
+.spin-mode-btn {
+    display: none;
+    position: absolute;
+    bottom: 16px;
+    right: 72px;
+    z-index: 10;
+    width: 48px;
+    height: 48px;
+    align-items: center;
+    justify-content: center;
+    background: rgba(68, 136, 204, 0.2);
+    border: 1.5px solid rgba(68, 136, 204, 0.4);
+    border-radius: 14px;
+    color: #70b0ff;
+    cursor: pointer;
+    padding: 0;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s;
+}
+.spin-mode-btn svg { width: 22px; height: 22px; }
+.spin-mode-btn:hover, .spin-mode-btn:active {
+    background: rgba(68, 136, 204, 0.35);
+    transform: scale(1.05);
+}
+
+/* Spin preview fullscreen overlay */
+#panel-spin-preview.spin-mode-active,
+#bottom-row:has(.spin-mode-active) {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    z-index: 1000 !important;
+    border-radius: 0 !important;
+    background: #0a0a0a;
+}
+
+.spin-mode-done {
+    display: none;
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: #aabbcc;
+    font-size: 13px;
+    font-family: inherit;
+    font-weight: 500;
+    padding: 8px 16px;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: all 0.15s;
+}
+.spin-mode-done:hover { background: rgba(255, 255, 255, 0.15); color: #ddeeff; }
+#panel-spin-preview.spin-mode-active .spin-mode-done { display: block; }
+
 /* Edit mode overlay — customizer goes fullscreen */
 #panel-customizer.edit-mode-active {
     position: fixed !important;
@@ -1275,9 +1335,11 @@ body {
     }
 
     .resize-handle { display: none !important; }
+    .panel-fs-btn { display: none !important; }
 
-    /* Show edit button + settings button on mobile */
+    /* Show edit + spin buttons on mobile */
     .edit-mode-btn { display: flex; }
+    .spin-mode-btn { display: flex; }
     .debug-hint { display: none !important; }
     .debug-toggle-btn { display: flex; }
 

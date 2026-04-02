@@ -259,6 +259,9 @@ const spinResizeObserver = new ResizeObserver(() => {
     const h = spinPanel.clientHeight
     if (w === 0 || h === 0) return
     spinCamera.aspect = w / h
+    // Pull camera back on portrait/narrow viewports so the ball fits
+    const baseZ = 1.5
+    spinCamera.position.z = w / h < 1 ? baseZ * (1 / (w / h)) * 0.9 : baseZ
     spinCamera.updateProjectionMatrix()
     spinRenderer.setSize(w, h)
     spinRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -467,5 +470,21 @@ if (editModeBtn && customizerPanel) {
 if (editModeDone && customizerPanel) {
     editModeDone.addEventListener('click', () => {
         customizerPanel.classList.remove('edit-mode-active', 'zoomed-out')
+    })
+}
+
+// Mobile spin preview toggle
+const spinModeBtn = document.getElementById('spin-mode-btn')
+const spinModeDone = document.getElementById('spin-mode-done')
+const spinPanelEl = document.getElementById('panel-spin-preview')
+
+if (spinModeBtn && spinPanelEl) {
+    spinModeBtn.addEventListener('click', () => {
+        spinPanelEl.classList.add('spin-mode-active')
+    })
+}
+if (spinModeDone && spinPanelEl) {
+    spinModeDone.addEventListener('click', () => {
+        spinPanelEl.classList.remove('spin-mode-active')
     })
 }
