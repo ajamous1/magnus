@@ -8,7 +8,6 @@ try {
 }
 
 export default {
-    base: '/magnus/',
     root: 'src/',
     publicDir: '../static/',
     resolve:
