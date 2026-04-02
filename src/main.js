@@ -57,7 +57,7 @@ fillLight.position.set(-5, 5, -5)
 scene.add(fillLight)
 
 const { gridHelper, fieldLines, backWall, leftWall, rightWall } = createPitchEnvironment(scene)
-const { goalWidth } = createGoal(scene)
+const { goalGroup, goalWidth, goalHeight } = createGoal(scene)
 
 const ballRadius = 0.22
 const penaltySpotZ = -11
@@ -165,8 +165,10 @@ const { kick, cancelKick } = createKickShot({
     ballStartPosition,
     ballRadius,
     goalWidth,
+    goalHeight,
     sizes,
     getBallGroup,
+    getGoalGroup: () => goalGroup,
     flightAnalyticsState,
     recordPhysicsSample,
     updateForceVectors,

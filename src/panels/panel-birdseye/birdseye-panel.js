@@ -40,7 +40,7 @@ export function createBirdseyePanel({
     const trailGeometry = new THREE.BufferGeometry()
     trailGeometry.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3))
     trailGeometry.setDrawRange(0, 0)
-    const trailMaterial = new THREE.LineBasicMaterial({ color: '#66d1ff', transparent: true, opacity: 0.95 })
+    const trailMaterial = new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.95 })
     const trailLine = new THREE.Line(trailGeometry, trailMaterial)
     trailLine.visible = false
     scene.add(trailLine)

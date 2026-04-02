@@ -28,7 +28,7 @@ export function createDragTrailRibbon({
     trailGeometry.setIndex(trailIndices)
 
     const trailMaterial = new THREE.MeshBasicMaterial({
-        color: '#CCCCFF',
+        color: '#ffffff',
         transparent: true,
         opacity: 0.85,
         side: THREE.DoubleSide,
