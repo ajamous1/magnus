@@ -8,17 +8,11 @@ try {
 }
 
 export default {
+    base: '/magnus/',
     root: 'src/',
     publicDir: '../static/',
     resolve:
     {
-        alias:
-        {
-            'three': '/Users/ahmad.jamous/magnus/node_modules/three',
-            'three/examples/jsm': '/Users/ahmad.jamous/magnus/node_modules/three/examples/jsm',
-            'gsap': '/Users/ahmad.jamous/magnus/node_modules/gsap',
-            'lil-gui': '/Users/ahmad.jamous/magnus/node_modules/lil-gui'
-        }
     },
     server:
     {
