@@ -767,7 +767,9 @@ body {
 
 #explode-slider {
     flex: 1;
-    min-width: 120px;
+    max-width: 200px;
+    min-width: 100px;
+    margin-left: var(--customizer-label-inset);
     -webkit-appearance: none;
     appearance: none;
     height: 4px;

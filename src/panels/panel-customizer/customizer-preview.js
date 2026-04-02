@@ -23,10 +23,6 @@ export function createCustomizerPreview({
     onBallChanged,
     cancelKick
 }) {
-    globalThis.__agentCameraLogs = globalThis.__agentCameraLogs || []
-    globalThis.__agentCameraLogs.push({ kind: 'init', data: { source: 'createCustomizerPreview' }, timestamp: Date.now() })
-    console.error('[agent-camera]', { kind: 'init', source: 'createCustomizerPreview', timestamp: Date.now() })
-
     const panelRoot = document.getElementById('panel-customizer')
     const zoomStateLabel = document.getElementById('zoom-state-label')
     const panelColorBtn = document.getElementById('panel-color-btn')
@@ -42,10 +38,7 @@ export function createCustomizerPreview({
         selectedPanelIndex: null,
         hoveredPanelIndex: null,
         cameraAnimTarget: null,
-        cameraAnimTargetSpherical: null,
-        debugRunId: null,
-        debugAnimFrame: 0,
-        debugPostControlsFrame: 0
+        cameraAnimTargetSpherical: null
     }
 
     const custCanvas = document.querySelector('canvas.customizer-preview')
@@ -199,22 +192,6 @@ export function createCustomizerPreview({
 
     const HOVER_BLUE = new THREE.Color('#4488cc')
 
-    function debugLog(runId, hypothesisId, location, message, data) {
-        if (!runId) return
-        console.log('[agent-debug] send', { runId, hypothesisId, location, message, data })
-        fetch('http://127.0.0.1:7877/ingest/395efd3b-8200-43fb-a58d-453fe40d1969', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2b54a2' }, body: JSON.stringify({ sessionId: '2b54a2', runId, hypothesisId, location, message, data, timestamp: Date.now() }) })
-            .then(() => console.log('[agent-debug] ok', { runId, hypothesisId, location, message }))
-            .catch(error => console.warn('[agent-debug] fail', { runId, hypothesisId, location, message, error: error?.message || String(error) }))
-    }
-
-    function emitAgentCameraLog(kind, data) {
-        const entry = { kind, data, timestamp: Date.now() }
-        const logStore = globalThis.__agentCameraLogs
-        logStore.push(entry)
-        if (logStore.length > 100) logStore.shift()
-        console.error('[agent-camera]', entry)
-    }
-
     function setHoverHighlight(panelIndex, on) {
         if (panelIndex == null || panelIndex === state.selectedPanelIndex) return
         if (state.custViewMode === 'flat') {
@@ -352,44 +329,13 @@ export function createCustomizerPreview({
         const hitDirLocal = previewBall.worldToLocal(hitPointWorld.clone()).normalize()
         let bestIndex = null
         let bestScore = -Infinity
-        const topCandidates = []
 
         for (let i = 0; i < state.custExplodePanels.length; i++) {
             const score = getPanelContainmentScore(hitDirLocal, state.custExplodePanels[i])
-            topCandidates.push({ index: i, score })
             if (score > bestScore && score >= -PANEL_CONTAINMENT_EPSILON) {
                 bestIndex = i
                 bestScore = score
             }
-        }
-
-        topCandidates.sort((a, b) => b.score - a.score)
-        const topSummary = topCandidates.slice(0, 3).map(candidate => ({
-            index: candidate.index,
-            score: Number(candidate.score.toFixed(5))
-        }))
-
-        // #region agent log
-        debugLog(state.debugRunId, 'H6', 'customizer-preview.js:pickClosedBallPanelFromRay', 'analytic panel pick', {
-            design: ballConfig.design,
-            selectedPanelIndex: state.selectedPanelIndex,
-            bestIndex,
-            bestScore: Number(bestScore.toFixed(5)),
-            hitDirLocal: hitDirLocal.toArray().map(v => Number(v.toFixed(4))),
-            topCandidates: topSummary
-        })
-        // #endregion
-        emitAgentCameraLog('analytic-pick', {
-            design: ballConfig.design,
-            bestIndex,
-            bestScore: Number(bestScore.toFixed(5)),
-            topCandidates: topSummary
-        })
-
-        if (bestIndex != null) {
-            console.log(
-                `[raycast] panel=${bestIndex}, hit=(${hitPointWorld.x.toFixed(2)},${hitPointWorld.y.toFixed(2)},${hitPointWorld.z.toFixed(2)}), mode=analytic`
-            )
         }
 
         return bestIndex
@@ -397,33 +343,7 @@ export function createCustomizerPreview({
 
     function buildCameraAnimTarget(panel) {
         const desiredDir = panel.centroidDir.clone().normalize()
-        const currentDir = custCamera.position.clone().normalize()
-        const angle = currentDir.angleTo(desiredDir)
-        const target = desiredDir.multiplyScalar(state.ballCamDistance)
-
-        // #region agent log
-        debugLog(state.debugRunId, 'H1', 'customizer-preview.js:buildCameraAnimTarget', 'camera target computed', {
-            selectedPanelIndex: state.selectedPanelIndex,
-            desiredPanelIndex: state.debugPendingPanelIndex ?? null,
-            angleToDesired: Number(angle.toFixed(4)),
-            currentDir: currentDir.toArray().map(v => Number(v.toFixed(4))),
-            desiredDir: panel.centroidDir.toArray().map(v => Number(v.toFixed(4))),
-            targetDir: target.clone().normalize().toArray().map(v => Number(v.toFixed(4))),
-            targetRadius: Number(target.length().toFixed(4)),
-            targetDotUp: Number(target.clone().normalize().dot(custCamera.up).toFixed(4)),
-            nearPole: Math.abs(panel.centroidDir.y) > 0.9
-        })
-        // #endregion
-        emitAgentCameraLog('target', {
-            selectedPanelIndex: state.selectedPanelIndex,
-            desiredPanelIndex: state.debugPendingPanelIndex ?? null,
-            angleToDesired: Number(angle.toFixed(4)),
-            targetDir: target.clone().normalize().toArray().map(v => Number(v.toFixed(4))),
-            targetDotUp: Number(target.clone().normalize().dot(custCamera.up).toFixed(4)),
-            nearPole: Math.abs(panel.centroidDir.y) > 0.9
-        })
-
-        return target
+        return desiredDir.multiplyScalar(state.ballCamDistance)
     }
 
     function selectPanel(index) {
@@ -457,31 +377,10 @@ export function createCustomizerPreview({
                 custControls.autoRotate = false
                 const panel = state.custExplodePanels[index]
                 if (panel) {
-                    state.debugPendingPanelIndex = index
                     state.cameraAnimTarget = previousIndex != null && previousIndex !== index
                         ? buildCameraAnimTarget(panel)
                         : panel.centroidDir.clone().multiplyScalar(state.ballCamDistance)
                     state.cameraAnimTargetSpherical = new THREE.Spherical().setFromVector3(state.cameraAnimTarget.clone())
-                    state.debugAnimFrame = 0
-                    state.debugPostControlsFrame = 0
-                    // #region agent log
-                    debugLog(state.debugRunId, 'H4', 'customizer-preview.js:selectPanel', 'selection accepted', {
-                        previousIndex,
-                        index,
-                        autoRotate: custControls.autoRotate,
-                        cameraPosition: custCamera.position.toArray().map(v => Number(v.toFixed(4))),
-                        cameraTarget: state.cameraAnimTarget.toArray().map(v => Number(v.toFixed(4))),
-                        ballCamDistance: Number(state.ballCamDistance.toFixed(4))
-                    })
-                    // #endregion
-                    emitAgentCameraLog('select', {
-                        previousIndex,
-                        index,
-                        autoRotate: custControls.autoRotate,
-                        cameraPosition: custCamera.position.toArray().map(v => Number(v.toFixed(4))),
-                        cameraTarget: state.cameraAnimTarget.toArray().map(v => Number(v.toFixed(4)))
-                    })
-                    delete state.debugPendingPanelIndex
                 }
             }
         } else {
@@ -539,36 +438,14 @@ export function createCustomizerPreview({
                 if (hitDir.dot(cameraDir) <= 0) continue
             }
             const idx = findPanelIndex(hit.object)
-            if (idx != null) {
-                console.log(`[raycast] panel=${idx}, hit=(${hit.point.x.toFixed(2)},${hit.point.y.toFixed(2)},${hit.point.z.toFixed(2)}), dist=${hit.distance.toFixed(3)}`)
-                return idx
-            }
+            if (idx != null) return idx
         }
         return null
     }
 
     custCanvas.addEventListener('pointerdown', e => {
-        state.debugRunId = `run-${Date.now()}`
         pointerDownPos = { x: e.clientX, y: e.clientY }
         pointerDownResult = doRaycast(e)
-        const spherical = new THREE.Spherical().setFromVector3(custCamera.position)
-        // #region agent log
-        debugLog(state.debugRunId, 'H5', 'customizer-preview.js:pointerdown', 'pointerdown raycast result', {
-            clientX: e.clientX,
-            clientY: e.clientY,
-            result: pointerDownResult,
-            selectedPanelIndex: state.selectedPanelIndex,
-            hoveredPanelIndex: state.hoveredPanelIndex,
-            autoRotate: custControls.autoRotate,
-            cameraPosition: custCamera.position.toArray().map(v => Number(v.toFixed(4))),
-            spherical: {
-                radius: Number(spherical.radius.toFixed(4)),
-                phi: Number(spherical.phi.toFixed(4)),
-                theta: Number(spherical.theta.toFixed(4))
-            }
-        })
-        // #endregion
-        console.log(`[click] pointerdown → panel ${pointerDownResult}`)
     })
 
     custCanvas.addEventListener('pointerup', e => {
@@ -592,7 +469,6 @@ export function createCustomizerPreview({
             pointerDownResult = null
             return
         }
-        console.log(`[click] pointerup ACCEPTED → selecting panel ${pointerDownResult} (was: ${state.selectedPanelIndex})`)
         selectPanel(pointerDownResult)
         pointerDownResult = null
     })
@@ -704,7 +580,6 @@ export function createCustomizerPreview({
 
     function animateCamera() {
         if (state.cameraAnimTarget && state.cameraAnimTargetSpherical && state.custViewMode !== 'flat') {
-            const beforePos = custCamera.position.clone()
             const currentSpherical = new THREE.Spherical().setFromVector3(custCamera.position)
             const targetSpherical = state.cameraAnimTargetSpherical
             const thetaDelta = Math.atan2(
@@ -719,34 +594,6 @@ export function createCustomizerPreview({
             custCamera.position.setFromSpherical(currentSpherical)
             custCamera.lookAt(0, 0, 0)
             const dist = custCamera.position.distanceTo(state.cameraAnimTarget)
-            if (state.debugAnimFrame < 8) {
-                const beforeSpherical = new THREE.Spherical().setFromVector3(beforePos)
-                const afterSpherical = new THREE.Spherical().setFromVector3(custCamera.position)
-                // #region agent log
-                debugLog(state.debugRunId, 'H1', 'customizer-preview.js:animateCamera', 'animateCamera frame', {
-                    frame: state.debugAnimFrame,
-                    distanceToTarget: Number(dist.toFixed(4)),
-                    radiusBefore: Number(beforePos.length().toFixed(4)),
-                    radiusAfter: Number(custCamera.position.length().toFixed(4)),
-                    angleStep: Number(beforePos.angleTo(custCamera.position).toFixed(4)),
-                    phiBefore: Number(beforeSpherical.phi.toFixed(4)),
-                    phiAfter: Number(afterSpherical.phi.toFixed(4)),
-                    thetaBefore: Number(beforeSpherical.theta.toFixed(4)),
-                    thetaAfter: Number(afterSpherical.theta.toFixed(4))
-                })
-                // #endregion
-                emitAgentCameraLog('anim', {
-                    frame: state.debugAnimFrame,
-                    distanceToTarget: Number(dist.toFixed(4)),
-                    radiusBefore: Number(beforePos.length().toFixed(4)),
-                    radiusAfter: Number(custCamera.position.length().toFixed(4)),
-                    phiBefore: Number(beforeSpherical.phi.toFixed(4)),
-                    phiAfter: Number(afterSpherical.phi.toFixed(4)),
-                    thetaBefore: Number(beforeSpherical.theta.toFixed(4)),
-                    thetaAfter: Number(afterSpherical.theta.toFixed(4))
-                })
-                state.debugAnimFrame += 1
-            }
             if (dist < 0.01) {
                 custCamera.position.copy(state.cameraAnimTarget)
                 state.cameraAnimTarget = null
@@ -755,28 +602,43 @@ export function createCustomizerPreview({
         }
     }
 
-    function debugAfterControlsUpdate() {
-        if (!state.cameraAnimTarget || state.custViewMode === 'flat' || state.debugPostControlsFrame >= 8) return
-        const spherical = new THREE.Spherical().setFromVector3(custCamera.position)
-        // #region agent log
-        debugLog(state.debugRunId, 'H3', 'customizer-preview.js:debugAfterControlsUpdate', 'post-controls camera state', {
-            frame: state.debugPostControlsFrame,
-            autoRotate: custControls.autoRotate,
-            radius: Number(spherical.radius.toFixed(4)),
-            phi: Number(spherical.phi.toFixed(4)),
-            theta: Number(spherical.theta.toFixed(4)),
-            distanceToTarget: Number(custCamera.position.distanceTo(state.cameraAnimTarget).toFixed(4))
-        })
-        // #endregion
-        emitAgentCameraLog('controls', {
-            frame: state.debugPostControlsFrame,
-            autoRotate: custControls.autoRotate,
-            radius: Number(spherical.radius.toFixed(4)),
-            phi: Number(spherical.phi.toFixed(4)),
-            theta: Number(spherical.theta.toFixed(4)),
-            distanceToTarget: Number(custCamera.position.distanceTo(state.cameraAnimTarget).toFixed(4))
-        })
-        state.debugPostControlsFrame += 1
+    function debugAfterControlsUpdate() {}
+
+    function applyFlatExplode(factor) {
+        if (!previewBall || state.custViewMode !== 'flat') return
+        if (factor === 0) {
+            for (const child of previewBall.children) {
+                child.position.set(0, 0, 0)
+            }
+            return
+        }
+
+        const panelCentroids = new Map()
+        for (const child of previewBall.children) {
+            const idx = child.userData.panelIndex
+            if (idx == null) continue
+            if (!panelCentroids.has(idx)) {
+                const geo = child.geometry
+                if (!geo) continue
+                geo.computeBoundingBox()
+                const cx = (geo.boundingBox.min.x + geo.boundingBox.max.x) / 2
+                const cy = (geo.boundingBox.min.y + geo.boundingBox.max.y) / 2
+                panelCentroids.set(idx, { x: cx, y: cy })
+            }
+        }
+
+        const groupCx = [...panelCentroids.values()].reduce((s, c) => s + c.x, 0) / (panelCentroids.size || 1)
+        const groupCy = [...panelCentroids.values()].reduce((s, c) => s + c.y, 0) / (panelCentroids.size || 1)
+
+        for (const child of previewBall.children) {
+            const idx = child.userData.panelIndex
+            if (idx == null) continue
+            const c = panelCentroids.get(idx)
+            if (!c) continue
+            const dx = c.x - groupCx
+            const dy = c.y - groupCy
+            child.position.set(dx * factor * 1.2, dy * factor * 1.2, 0)
+        }
     }
 
     // --- Main updateBall ---
@@ -798,6 +660,7 @@ export function createCustomizerPreview({
         custScene.remove(previewBall)
         if (state.custViewMode === 'flat') {
             previewBall = buildFlatLayout(ballConfig)
+            applyFlatExplode(state.custExplodeFactor)
             custControls.autoRotate = false
             custControls.enableRotate = false
             custControls.enablePan = true
@@ -805,11 +668,14 @@ export function createCustomizerPreview({
             custControls.maxPolarAngle = Math.PI / 2
             custControls.minDistance = 1
             custControls.maxDistance = 60
+            custControls.target.set(0, 0, 0)
             custCamera.position.set(0, 0, ballConfig.design === 'classic' ? 18 : 9)
             custCamera.lookAt(0, 0, 0)
+            custControls.update()
         } else {
             const result = buildExplodedBall(ballConfig, previewRadius)
             previewBall = result.group
+            previewBall.scale.set(1, 1, 1)
             state.custExplodePanels = result.panels
             applyExplodeFactor(state.custExplodePanels, state.custExplodeFactor)
             if (state.custExplodeFactor === 0) addStitching(previewBall, ballConfig, previewRadius)
@@ -854,7 +720,10 @@ export function createCustomizerPreview({
             state.custExplodeFactor = parseFloat(value)
             syncExplode(state.custExplodeFactor)
 
-            if (state.custViewMode === 'flat') return
+            if (state.custViewMode === 'flat') {
+                applyFlatExplode(state.custExplodeFactor)
+                return
+            }
 
             // Rebuild when crossing zero boundary (stitching add/remove)
             const crossedZero = (prev === 0) !== (state.custExplodeFactor === 0)
