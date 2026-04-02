@@ -2,6 +2,9 @@
  * Drag-to-resize handles between bento panels.
  */
 export function initBentoResize() {
+    // Skip resize handles on mobile — layout is CSS-controlled
+    if (window.matchMedia('(max-width: 768px)').matches) return
+
     let resizeDrag = null
 
     document.querySelectorAll('.resize-handle').forEach(handle => {

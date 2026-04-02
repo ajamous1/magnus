@@ -453,3 +453,19 @@ tick()
 
 initBentoResize()
 initPanelFullscreen()
+
+// Mobile edit mode toggle
+const editModeBtn = document.getElementById('edit-mode-btn')
+const editModeDone = document.getElementById('edit-mode-done')
+const customizerPanel = document.getElementById('panel-customizer')
+
+if (editModeBtn && customizerPanel) {
+    editModeBtn.addEventListener('click', () => {
+        customizerPanel.classList.add('edit-mode-active', 'zoomed-out')
+    })
+}
+if (editModeDone && customizerPanel) {
+    editModeDone.addEventListener('click', () => {
+        customizerPanel.classList.remove('edit-mode-active', 'zoomed-out')
+    })
+}

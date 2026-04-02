@@ -149,12 +149,18 @@ export function createDebugGui(container, debugParams, hooks) {
 
     const debugHint = document.getElementById('debug-hint')
 
+    function toggleDebug() {
+        const isVisible = container.classList.toggle('visible')
+        if (debugHint) debugHint.style.opacity = isVisible ? '0' : '1'
+    }
+
     window.addEventListener('keydown', (e) => {
-        if (e.key === 'h' || e.key === 'H') {
-            const isVisible = container.classList.toggle('visible')
-            if (debugHint) debugHint.style.opacity = isVisible ? '0' : '1'
-        }
+        if (e.key === 'h' || e.key === 'H') toggleDebug()
     })
+
+    // Mobile settings button
+    const toggleBtn = document.getElementById('debug-toggle-btn')
+    if (toggleBtn) toggleBtn.addEventListener('click', toggleDebug)
 
     return { gui, drawCircle, speedCtrl, axisXCtrl, axisYCtrl, axisZCtrl }
 }

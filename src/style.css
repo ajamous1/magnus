@@ -133,6 +133,27 @@ body {
     transition: opacity 0.3s;
 }
 
+.debug-toggle-btn {
+    display: none;
+    position: absolute;
+    top: 10px;
+    right: 46px;
+    z-index: 9;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #667;
+    cursor: pointer;
+    transition: all 0.15s;
+    padding: 0;
+}
+.debug-toggle-btn svg { width: 18px; height: 18px; }
+.debug-toggle-btn:hover { background: rgba(255, 255, 255, 0.12); color: #aaa; }
+
 .debug-hint kbd {
     display: inline-block;
     background: rgba(255, 255, 255, 0.08);
@@ -1052,4 +1073,227 @@ body {
 .resizing iframe,
 .resizing canvas {
     pointer-events: none;
+}
+
+/* ============================================
+   RESPONSIVE: Tablet (≤1024px)
+   ============================================ */
+@media (max-width: 1024px) {
+    .bento-grid { padding: 6px; }
+
+    #top-row {
+        flex: 55 0 0px;
+    }
+
+    #panel-customizer {
+        flex: 35 0 0px !important;
+    }
+
+    #panel-shooter {
+        flex: 65 0 0px !important;
+    }
+
+    #bottom-row {
+        flex: 35 0 0px;
+    }
+
+    /* Compact customizer controls */
+    .customizer-controls {
+        padding: 4px;
+    }
+
+    .quick-tray {
+        padding: 6px;
+        gap: 3px;
+    }
+
+    .quick-switch-row {
+        grid-template-columns: 1fr;
+        gap: 3px;
+    }
+
+    .quick-controls-row {
+        grid-template-columns: 1fr auto;
+        gap: 4px;
+    }
+
+    .quick-bottom-row {
+        gap: 8px;
+    }
+
+    .segment-design {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .design-btn {
+        font-size: 8px;
+        padding: 4px 2px;
+    }
+
+    .view-btn {
+        font-size: 8px;
+        padding: 4px 6px;
+    }
+
+    .control-label {
+        font-size: 0.5rem;
+    }
+
+    .color-picker.square {
+        width: 28px;
+        height: 28px;
+    }
+}
+
+/* ============================================
+   RESPONSIVE: Mobile (≤768px)
+   2 panels: Shooter + Spin Preview
+   Customizer hidden — accessed via edit mode
+   ============================================ */
+
+/* Edit mode button — hidden on desktop, shown on mobile */
+.edit-mode-btn {
+    display: none;
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    z-index: 10;
+    width: 48px;
+    height: 48px;
+    align-items: center;
+    justify-content: center;
+    background: rgba(68, 136, 204, 0.2);
+    border: 1.5px solid rgba(68, 136, 204, 0.4);
+    border-radius: 14px;
+    color: #70b0ff;
+    cursor: pointer;
+    padding: 0;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s;
+}
+.edit-mode-btn svg { width: 22px; height: 22px; }
+.edit-mode-btn:hover, .edit-mode-btn:active {
+    background: rgba(68, 136, 204, 0.35);
+    transform: scale(1.05);
+}
+
+/* Edit mode overlay — customizer goes fullscreen */
+#panel-customizer.edit-mode-active {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    z-index: 1000 !important;
+    border-radius: 0 !important;
+    flex: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: #0a0a0a;
+}
+
+#panel-customizer.edit-mode-active .customizer-viewport {
+    flex: 1;
+}
+
+#panel-customizer.edit-mode-active .customizer-controls {
+    flex-shrink: 0;
+    padding: 0;
+    background: transparent;
+    border-top: none;
+    overflow: visible;
+    align-items: center;
+}
+
+/* Show detailed toolbar, hide quick tray in edit mode */
+#panel-customizer.edit-mode-active .quick-tray {
+    display: none;
+}
+
+#panel-customizer.edit-mode-active .detailed-tray {
+    display: contents;
+}
+
+/* Done button inside edit mode */
+.edit-mode-done {
+    display: none;
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: #aabbcc;
+    font-size: 13px;
+    font-family: inherit;
+    font-weight: 500;
+    padding: 8px 16px;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: all 0.15s;
+}
+.edit-mode-done:hover { background: rgba(255, 255, 255, 0.15); color: #ddeeff; }
+#panel-customizer.edit-mode-active .edit-mode-done { display: block; }
+
+@media (max-width: 768px) {
+    html, body {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .bento-grid {
+        height: 100vh;
+        height: 100dvh;
+        padding: 4px;
+        gap: 4px;
+    }
+
+    .bento-row {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    #top-row {
+        flex: 1 !important;
+        min-height: 0;
+    }
+
+    /* Hide everything except shooter */
+    #bottom-row { display: none !important; }
+
+    #panel-customizer {
+        display: none !important;
+    }
+    #panel-customizer.edit-mode-active {
+        display: flex !important;
+    }
+
+    #panel-shooter {
+        flex: 1 !important;
+        min-height: 0;
+    }
+
+    .resize-handle { display: none !important; }
+
+    /* Show edit button + settings button on mobile */
+    .edit-mode-btn { display: flex; }
+    .debug-hint { display: none !important; }
+    .debug-toggle-btn { display: flex; }
+
+    .vector-legend {
+        font-size: 8px;
+        gap: 3px;
+        left: 6px;
+        top: 6px;
+    }
+
+    .debug-overlay {
+        width: 180px;
+        font-size: 9px;
+    }
+
+    .spin-preview-label {
+        font-size: 8px;
+    }
 }
