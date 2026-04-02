@@ -10,10 +10,38 @@ export const ballConfig = {
 }
 
 export const BALL_DESIGNS = {
-    classic: { drag: 1.0, randomnessBonus: 0 },
-    jabulani: { drag: 0.85, randomnessBonus: 0.3 },
-    brazuca: { drag: 1.1, randomnessBonus: -0.2 },
-    trionda: { drag: 0.9, randomnessBonus: 0.1 },
+    classic: {
+        drag: 1.0,
+        randomnessBonus: 0,
+        curveMultiplier: 1.0,
+        knuckleIntensity: 0,
+        speedRetention: 1.0,
+        arcModifier: 1.0,
+    },
+    jabulani: {
+        drag: 0.8,
+        randomnessBonus: 0.4,
+        curveMultiplier: 0.7,
+        knuckleIntensity: 0.6,
+        speedRetention: 1.15,
+        arcModifier: 1.1,
+    },
+    brazuca: {
+        drag: 1.1,
+        randomnessBonus: -0.15,
+        curveMultiplier: 1.3,
+        knuckleIntensity: 0,
+        speedRetention: 0.95,
+        arcModifier: 0.95,
+    },
+    trionda: {
+        drag: 0.95,
+        randomnessBonus: -0.1,
+        curveMultiplier: 1.15,
+        knuckleIntensity: 0,
+        speedRetention: 1.0,
+        arcModifier: 1.0,
+    },
 }
 
 /** Legacy helper — kept for potential reuse in procedural seam experiments */

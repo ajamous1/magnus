@@ -46,12 +46,12 @@ export function createKickShot({
 
         const finalX = targetX + randomX
         const finalPower = Math.min(power * randomPower, 2.5)
-        const duration = 0.6 + (1 - Math.min(finalPower, 1)) * 0.4
+        const duration = (0.6 + (1 - Math.min(finalPower, 1)) * 0.4) / (design.speedRetention || 1)
 
-        const arcPeak = debugParams.arcHeight * finalPower * finalPower * 3.5 / debugParams.gravity
+        const arcPeak = debugParams.arcHeight * finalPower * finalPower * 3.5 / debugParams.gravity * (design.arcModifier || 1)
         const targetZ = 1 + finalPower * 2
 
-        const curveStrength = curve * goalWidth * 1.84 * debugParams.curveIntensity * design.drag
+        const curveStrength = curve * goalWidth * 1.84 * debugParams.curveIntensity * design.drag * (design.curveMultiplier || 1)
         kickPhysics.activeCurveForce = curveStrength
         const wind = debugParams.windSpeed
         const steps = 60
@@ -66,13 +66,41 @@ export function createKickShot({
 
         let physStartStep = -1
 
+        const knuckle = design.knuckleIntensity || 0
+        const isLowSpin = Math.abs(curve) < 0.3
+        const knuckleActive = knuckle > 0 && isLowSpin
+
+        let swerveX = 0, swerveY = 0
+        let swerveBreakT = 0
+        let decelerationT = 0
+        if (knuckleActive) {
+            swerveX = (Math.random() - 0.5) * 2 * knuckle * finalPower * goalWidth * 0.4
+            swerveY = (Math.random() - 0.5) * knuckle * finalPower * 0.8
+            swerveBreakT = 0.3 + Math.random() * 0.35
+            decelerationT = 0.4 + Math.random() * 0.3
+        }
+
         for (let i = 0; i <= steps; i++) {
             const t = i / steps
             const easedT = 1 - Math.pow(1 - t, 2)
-            const z = ballStartPosition.z + (targetZ - ballStartPosition.z) * easedT
-            const x = (1 - t) * (1 - t) * 0 + 2 * (1 - t) * t * curveStrength + t * t * finalX
+
+            let zSpeed = 1
+            if (knuckleActive && t > decelerationT) {
+                const decelProgress = (t - decelerationT) / (1 - decelerationT)
+                zSpeed = 1 - 0.3 * knuckle * decelProgress
+            }
+            const z = ballStartPosition.z + (targetZ - ballStartPosition.z) * easedT * zSpeed
+
+            let x = (1 - t) * (1 - t) * 0 + 2 * (1 - t) * t * curveStrength + t * t * finalX
                 + wind * t * t * 0.5
-            const y = ballRadius + arcPeak * 4 * t * (1 - t) * debugParams.gravity
+            let y = ballRadius + arcPeak * 4 * t * (1 - t) * debugParams.gravity
+
+            if (knuckleActive && t > swerveBreakT) {
+                const swerveProgress = Math.min(1, (t - swerveBreakT) / 0.4)
+                const smooth = swerveProgress * swerveProgress * (3 - 2 * swerveProgress)
+                x += swerveX * smooth
+                y += swerveY * smooth
+            }
 
             pathX.push(x)
             pathY.push(Math.max(ballRadius, y))
@@ -249,11 +277,11 @@ export function createKickShot({
         const airDensity = 1.225
         const dynamicViscosity = 1.81e-5
         const reynolds = (airDensity * peakSpeed * ballDiameter) / dynamicViscosity
-        const avgCd = estimateCd(meanSpeed)
+        const avgCd = estimateCd(meanSpeed, design)
 
         const omega = (Math.PI * 4 * finalPower * debugParams.spinMultiplier) / duration
         const spinParam = (Math.abs(omega) * (ballDiameter / 2)) / Math.max(1, meanSpeed)
-        const maxCl = estimateCl(spinParam)
+        const maxCl = estimateCl(spinParam, design)
 
         recordPhysicsSample({
             meanSpeed,
