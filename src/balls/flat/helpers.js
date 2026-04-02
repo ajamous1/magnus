@@ -60,16 +60,13 @@ export function createFlatLayoutHelpers(group, config) {
                 const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2
                 const dot = px * (cx - mx) + py * (cy - my)
                 if (type === 'scurve') {
-                    // Two-segment S-curve with wide rounded lobes
                     const amp = el * 0.52
                     const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2
-                    // First lobe: wide rounded bulge
                     shape.bezierCurveTo(
                         a.x + ex * 0.08 + px * amp * 0.85, a.y + ey * 0.08 + py * amp * 0.85,
                         a.x + ex * 0.30 + px * amp, a.y + ey * 0.30 + py * amp,
-                        midX + px * amp * 0.1, midY + py * amp * 0.1
+                        midX, midY
                     )
-                    // Second lobe: wide rounded bulge opposite side
                     shape.bezierCurveTo(
                         a.x + ex * 0.70 - px * amp, a.y + ey * 0.70 - py * amp,
                         a.x + ex * 0.92 - px * amp * 0.85, a.y + ey * 0.92 - py * amp * 0.85,
