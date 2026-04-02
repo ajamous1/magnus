@@ -351,6 +351,7 @@ body {
     border-radius: 14px;
     border: 1px solid #1e2830;
     width: fit-content;
+    overflow: visible;
 }
 .studio-toolbar-divider {
     width: 1px;
@@ -509,24 +510,30 @@ body {
 .tb-explode-slider {
     display: none;
     position: absolute;
-    bottom: 100%;
+    bottom: calc(100% + 10px);
     left: 50%;
     transform: translateX(-50%);
-    margin-bottom: 10px;
     background: #0e1218;
     border: 1px solid #1e2830;
     border-radius: 10px;
-    padding: 16px 10px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    padding: 10px 16px;
     z-index: 100;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     animation: tbDropIn 0.12s ease;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
 }
-.tb-explode-slider.open { display: flex; align-items: center; justify-content: center; }
+.tb-explode-slider.open { display: flex; }
+.tb-explode-label {
+    font-size: 9px;
+    color: #556677;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
 .tb-explode-slider input[type="range"] {
-    writing-mode: vertical-lr;
-    direction: rtl;
-    height: 300px;
-    width: 4px;
+    width: 200px;
+    height: 4px;
     -webkit-appearance: none;
     appearance: none;
     background: transparent;

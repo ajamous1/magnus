@@ -636,6 +636,44 @@ export function createCustomizerPreview({
 
     function debugAfterControlsUpdate() {}
 
+    function updateBaseColorsInPlace() {
+        if (!previewBall) return
+        const primary = new THREE.Color(ballConfig.primaryColor)
+        const secondary = new THREE.Color(ballConfig.secondaryColor)
+
+        if (state.custViewMode === 'flat') {
+            for (const child of previewBall.children) {
+                if (child.userData.panelIndex == null) continue
+                if (!child.isMesh) continue
+                const idx = child.userData.panelIndex
+                const isPent = ballConfig.design === 'classic' && idx < 12
+                const override = getPanelColor(ballConfig.design, idx)
+                if (!override) {
+                    child.material.color.copy(isPent ? secondary : primary)
+                }
+            }
+        } else {
+            for (const child of previewBall.children) {
+                if (child.userData.panelIndex == null) continue
+                if (child.isGroup) {
+                    const fillMesh = child.children[0]
+                    if (!fillMesh?.material) continue
+                    const idx = child.userData.panelIndex
+                    const isPent = ballConfig.design === 'classic' && idx < 12
+                    const override = getPanelColor(ballConfig.design, idx)
+                    if (!override) {
+                        const col = isPent ? secondary : primary
+                        fillMesh.material.color.copy(col)
+                        fillMesh.material.emissive.copy(col)
+                    }
+                }
+                if (child.isLine && !child.userData.panelIndex) {
+                    child.material.color.copy(secondary)
+                }
+            }
+        }
+    }
+
     function applyFlatExplode(factor) {
         if (!previewBall || state.custViewMode !== 'flat') return
         if (factor === 0) {
@@ -805,33 +843,25 @@ export function createCustomizerPreview({
             })
         })
 
-        document.getElementById('primary-color').addEventListener('input', (e) => {
-            ballConfig.primaryColor = e.target.value
-            const mirror = document.getElementById('primary-color-detail')
-            if (mirror) mirror.value = ballConfig.primaryColor
-            updateBall()
-        })
+        function syncBaseColor(src, mirrorId) {
+            const isSec = src.id.includes('secondary')
+            if (isSec) ballConfig.secondaryColor = src.value
+            else ballConfig.primaryColor = src.value
+            const mirror = document.getElementById(mirrorId)
+            if (mirror) mirror.value = src.value
+            updateBaseColorsInPlace()
+        }
 
-        document.getElementById('secondary-color').addEventListener('input', (e) => {
-            ballConfig.secondaryColor = e.target.value
-            const mirror = document.getElementById('secondary-color-detail')
-            if (mirror) mirror.value = ballConfig.secondaryColor
-            updateBall()
-        })
+        document.getElementById('primary-color')?.addEventListener('input', (e) => syncBaseColor(e.target, 'primary-color-detail'))
+        document.getElementById('secondary-color')?.addEventListener('input', (e) => syncBaseColor(e.target, 'secondary-color-detail'))
+        document.getElementById('primary-color-detail')?.addEventListener('input', (e) => syncBaseColor(e.target, 'primary-color'))
+        document.getElementById('secondary-color-detail')?.addEventListener('input', (e) => syncBaseColor(e.target, 'secondary-color'))
 
-        document.getElementById('primary-color-detail')?.addEventListener('input', (e) => {
-            ballConfig.primaryColor = e.target.value
-            const mirror = document.getElementById('primary-color')
-            if (mirror) mirror.value = ballConfig.primaryColor
-            updateBall()
-        })
-
-        document.getElementById('secondary-color-detail')?.addEventListener('input', (e) => {
-            ballConfig.secondaryColor = e.target.value
-            const mirror = document.getElementById('secondary-color')
-            if (mirror) mirror.value = ballConfig.secondaryColor
-            updateBall()
-        })
+        const colorChangeHandler = () => updateBall()
+        document.getElementById('primary-color')?.addEventListener('change', colorChangeHandler)
+        document.getElementById('secondary-color')?.addEventListener('change', colorChangeHandler)
+        document.getElementById('primary-color-detail')?.addEventListener('change', colorChangeHandler)
+        document.getElementById('secondary-color-detail')?.addEventListener('change', colorChangeHandler)
     }
 
     if (panelRoot) {
