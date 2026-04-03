@@ -238,6 +238,7 @@ function rebuildSpinBall() {
     spinBall = buildMainBallForPreview(spinRadius)
     spinBall.rotation.copy(rot)
     spinScene.add(spinBall)
+    if (customizer) customizer.applyCanvasTextures(spinBall)
 }
 
 const spinCamera = new THREE.PerspectiveCamera(
@@ -315,7 +316,7 @@ spinResizeObserver.observe(spinPanel)
 }
 
 const previewRadius = 0.4
-const customizer = createCustomizerPreview({
+let customizer = createCustomizerPreview({
     mainScene: scene,
     ballConfig,
     ballRadius,

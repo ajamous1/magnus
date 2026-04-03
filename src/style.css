@@ -364,9 +364,11 @@ body {
 /* Tool buttons (icon only) */
 .tb-btn {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    width: 42px;
+    gap: 2px;
+    min-width: 42px;
     height: 42px;
     background: transparent;
     border: none;
@@ -374,10 +376,82 @@ body {
     color: #6680a0;
     cursor: pointer;
     transition: all 0.12s;
-    padding: 0;
+    padding: 4px 8px;
     position: relative;
 }
-.tb-btn svg { width: 22px; height: 22px; }
+.tb-btn svg { width: 18px; height: 18px; }
+.tb-label {
+    font-size: 8px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: inherit;
+    line-height: 1;
+}
+.tb-color-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.tb-color-well {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+.tb-active-color {
+    border-color: #5599dd !important;
+    box-shadow: 0 0 0 2px rgba(85, 153, 221, 0.3);
+}
+.tb-brush-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.tb-slider-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+.tb-range {
+    width: 80px;
+    height: 4px;
+    accent-color: #5599dd;
+}
+.tb-shape-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.tb-shape-picker {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+}
+.tb-shape-opt {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1.5px solid transparent;
+    border-radius: 6px;
+    color: #6680a0;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.1s;
+}
+.tb-shape-opt:hover {
+    background: #161e28;
+    color: #a0b8d0;
+}
+.tb-shape-opt.active {
+    background: #1a3a5a;
+    color: #70b0ff;
+    border-color: #335566;
+}
 .tb-btn:hover { background: #161e28; color: #a0b8d0; }
 .tb-btn.active {
     background: #1a3a5a;
@@ -485,6 +559,27 @@ body {
 .tb-swatch:hover { transform: scale(1.12); border-color: rgba(255,255,255,0.2); }
 
 /* View toggle pills in toolbar */
+.tb-design-group {
+    display: flex;
+    background: #0e1520;
+    border-radius: 6px;
+    border: 1px solid #1e2830;
+    overflow: hidden;
+}
+.tb-design-btn {
+    background: transparent;
+    border: none;
+    color: #556677;
+    font-size: 10px;
+    font-family: inherit;
+    font-weight: 600;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all 0.12s;
+}
+.tb-design-btn:hover { color: #99aabb; background: #161e28; }
+.tb-design-btn.active { background: #1a3a5a; color: #70b0ff; }
+
 .tb-view-group {
     display: flex;
     background: #0e1520;

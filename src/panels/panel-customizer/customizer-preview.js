@@ -72,6 +72,468 @@ export function createCustomizerPreview({
     previewBall = buildPanelBall()
     custScene.add(previewBall)
 
+    // =========================================================================
+    // Unified per-panel canvas brush system
+    // =========================================================================
+
+    const PANEL_TEX_SIZE = 512
+    const panelCanvases = new Map()
+    const panelUVBases = new Map()
+    let painting = false
+    let paintingLockedPanel = -1
+    const strokeBuffer = []
+    let strokePanelIndex = -1
+
+    function generatePanelUVs(fillMesh, centroidDir, panelIndex) {
+        const posAttr = fillMesh.geometry.attributes.position
+        const uvs = new Float32Array(posAttr.count * 2)
+        const ref = Math.abs(centroidDir.y) < 0.9
+            ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
+        const ux = new THREE.Vector3().crossVectors(ref, centroidDir).normalize()
+        const uy = new THREE.Vector3().crossVectors(centroidDir, ux).normalize()
+        let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity
+        for (let i = 0; i < posAttr.count; i++) {
+            const dir = new THREE.Vector3(
+                posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)
+            ).normalize()
+            const u = dir.dot(ux), v = dir.dot(uy)
+            uvs[i * 2] = u; uvs[i * 2 + 1] = v
+            if (u < minU) minU = u; if (u > maxU) maxU = u
+            if (v < minV) minV = v; if (v > maxV) maxV = v
+        }
+        const rangeU = maxU - minU || 1
+        const rangeV = maxV - minV || 1
+        for (let i = 0; i < posAttr.count; i++) {
+            uvs[i * 2] = (uvs[i * 2] - minU) / rangeU
+            uvs[i * 2 + 1] = (uvs[i * 2 + 1] - minV) / rangeV
+        }
+        fillMesh.geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
+        panelUVBases.set(panelIndex, { ux, uy, minU, maxU, minV, maxV })
+    }
+
+    function dirToLocalUV(dir, panelIndex) {
+        const basis = panelUVBases.get(panelIndex)
+        if (!basis) return null
+        const d = dir.clone().normalize()
+        const rawU = d.dot(basis.ux)
+        const rawV = d.dot(basis.uy)
+        const rangeU = basis.maxU - basis.minU || 1
+        const rangeV = basis.maxV - basis.minV || 1
+        return {
+            x: (rawU - basis.minU) / rangeU,
+            y: (rawV - basis.minV) / rangeV
+        }
+    }
+
+    function getPanelBaseColor(panelIndex) {
+        const override = getPanelColor(ballConfig.design, panelIndex)
+        if (override) return override
+        const isPent = ballConfig.design === 'classic' && panelIndex < 12
+        return isPent ? ballConfig.secondaryColor : ballConfig.primaryColor
+    }
+
+    function getOrCreateCanvas(panelIndex) {
+        const prev = panelCanvases.get(panelIndex)
+        if (prev) return prev
+
+        const baseColor = getPanelBaseColor(panelIndex)
+        const canvas2d = document.createElement('canvas')
+        canvas2d.width = PANEL_TEX_SIZE
+        canvas2d.height = PANEL_TEX_SIZE
+        const ctx = canvas2d.getContext('2d')
+        ctx.fillStyle = baseColor
+        ctx.fillRect(0, 0, PANEL_TEX_SIZE, PANEL_TEX_SIZE)
+        const texture = new THREE.CanvasTexture(canvas2d)
+        texture.colorSpace = THREE.SRGBColorSpace
+        const entry = { canvas: canvas2d, ctx, texture, baseColor }
+        panelCanvases.set(panelIndex, entry)
+        return entry
+    }
+
+    function invalidateCanvases(indices) {
+        if (indices === 'all') {
+            panelCanvases.clear()
+        } else if (Array.isArray(indices)) {
+            for (const i of indices) panelCanvases.delete(i)
+        } else if (indices != null) {
+            panelCanvases.delete(indices)
+        }
+    }
+
+    function initBrushTextures() {
+        if (!previewBall) return
+
+        if (state.custViewMode === 'flat') {
+            for (const child of previewBall.children) {
+                if (!child.isMesh || child.userData.panelIndex == null) continue
+                const panelIdx = child.userData.panelIndex
+                const uvAttr = child.geometry.attributes.uv
+                if (!uvAttr) continue
+
+                let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity
+                for (let i = 0; i < uvAttr.count; i++) {
+                    const u = uvAttr.getX(i), v = uvAttr.getY(i)
+                    if (u < minU) minU = u; if (u > maxU) maxU = u
+                    if (v < minV) minV = v; if (v > maxV) maxV = v
+                }
+                const rangeU = maxU - minU || 1
+                const rangeV = maxV - minV || 1
+                for (let i = 0; i < uvAttr.count; i++) {
+                    uvAttr.setXY(i, (uvAttr.getX(i) - minU) / rangeU, (uvAttr.getY(i) - minV) / rangeV)
+                }
+                uvAttr.needsUpdate = true
+
+                const entry = getOrCreateCanvas(panelIdx)
+                child.material.dispose()
+                child.material = new THREE.MeshBasicMaterial({
+                    map: entry.texture, side: THREE.DoubleSide
+                })
+                child.userData._brushTex = entry.texture
+                child.userData._brushCtx = entry.ctx
+            }
+        } else {
+            panelUVBases.clear()
+            for (let i = 0; i < state.custExplodePanels.length; i++) {
+                const panel = state.custExplodePanels[i]
+                const group = panel.mesh
+                if (!group || !group.isGroup) continue
+                const fillMesh = group.children[0]
+                if (!fillMesh || !fillMesh.isMesh) continue
+                const panelIdx = group.userData.panelIndex
+                if (panelIdx == null) continue
+
+                generatePanelUVs(fillMesh, panel.centroidDir, panelIdx)
+
+                const entry = getOrCreateCanvas(panelIdx)
+                fillMesh.material.dispose()
+                fillMesh.material = new THREE.MeshLambertMaterial({
+                    map: entry.texture,
+                    emissiveMap: entry.texture,
+                    color: 0xffffff,
+                    emissive: 0xffffff,
+                    emissiveIntensity: 0.15,
+                    side: THREE.DoubleSide
+                })
+                fillMesh.userData._brushTex = entry.texture
+                fillMesh.userData._brushCtx = entry.ctx
+            }
+        }
+    }
+
+    function raycastPanel(e) {
+        const rect = custCanvas.getBoundingClientRect()
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+        raycaster.setFromCamera(mouse, custCamera)
+
+        if (state.custViewMode === 'flat') {
+            const meshes = []
+            if (previewBall) {
+                for (const child of previewBall.children) {
+                    if (child.isMesh && child.userData.panelIndex != null) meshes.push(child)
+                }
+            }
+            const hits = raycaster.intersectObjects(meshes, false)
+            if (hits.length > 0 && hits[0].uv) {
+                return { mesh: hits[0].object, uv: hits[0].uv, panelIndex: hits[0].object.userData.panelIndex, point: hits[0].point }
+            }
+            return null
+        }
+
+        // 3D: closed classic ball — analytic hit
+        if (state.custExplodeFactor === 0 && ballConfig.design === 'classic') {
+            const hitPoint = getRaySphereHitPoint()
+            if (!hitPoint) return null
+            const hitDirLocal = previewBall.worldToLocal(hitPoint.clone()).normalize()
+            const panelIdx = pickClosedBallPanelFromRay()
+            if (panelIdx == null) return null
+            const uv = dirToLocalUV(hitDirLocal, panelIdx)
+            if (!uv) return null
+            const panel = state.custExplodePanels[panelIdx]
+            const fillMesh = panel?.mesh?.children?.[0]
+            return { mesh: fillMesh, uv, panelIndex: panelIdx, point: hitPoint }
+        }
+
+        // 3D: exploded or non-classic — mesh intersection
+        const ballCenter = getBallCenterWorld()
+        const cameraDir = custCamera.position.clone().sub(ballCenter).normalize()
+        const intersects = raycaster.intersectObjects(getPanelMeshes(), false)
+        for (const hit of intersects) {
+            const hitDir = hit.point.clone().sub(ballCenter).normalize()
+            if (hitDir.dot(cameraDir) <= 0) continue
+            const idx = findPanelIndex(hit.object)
+            if (idx == null) continue
+            if (hit.uv) {
+                return { mesh: hit.object, uv: hit.uv, panelIndex: idx, point: hit.point }
+            }
+            const hitDirLocal = previewBall.worldToLocal(hit.point.clone()).normalize()
+            const uv = dirToLocalUV(hitDirLocal, idx)
+            if (uv) return { mesh: hit.object, uv, panelIndex: idx, point: hit.point }
+        }
+        return null
+    }
+
+    function panelBrushStamp(panelIndex, uv, size, color) {
+        const entry = panelCanvases.get(panelIndex)
+        if (!entry) return
+        const { ctx, texture } = entry
+        const cx = uv.x * PANEL_TEX_SIZE
+        const cy = (1 - uv.y) * PANEL_TEX_SIZE
+        const r = size * 2
+        ctx.save()
+        ctx.fillStyle = color
+        ctx.beginPath()
+        ctx.arc(cx, cy, r, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+        texture.needsUpdate = true
+    }
+
+    function panelBrushStroke(panelIndex, uv, size, color) {
+        if (strokePanelIndex !== panelIndex) {
+            strokeBuffer.length = 0
+            strokePanelIndex = panelIndex
+        }
+        strokeBuffer.push(uv)
+        if (strokeBuffer.length < 2) {
+            panelBrushStamp(panelIndex, uv, size, color)
+            return
+        }
+        const len = strokeBuffer.length
+        const p0 = strokeBuffer[Math.max(0, len - 4)]
+        const p1 = strokeBuffer[Math.max(0, len - 3)]
+        const p2 = strokeBuffer[len - 2]
+        const p3 = strokeBuffer[len - 1]
+        const dx = (p3.x - p2.x) * PANEL_TEX_SIZE
+        const dy = (p3.y - p2.y) * PANEL_TEX_SIZE
+        const segDist = Math.sqrt(dx * dx + dy * dy)
+        const steps = Math.max(1, Math.ceil(segDist / (size * 0.8)))
+        for (let s = 1; s <= steps; s++) {
+            const t = s / steps
+            const t2 = t * t, t3 = t2 * t
+            const pt = {
+                x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+                y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
+            }
+            panelBrushStamp(panelIndex, pt, size, color)
+        }
+    }
+
+    const SHAPE_PATHS = {
+        star: (ctx, cx, cy, r) => {
+            const spikes = 5
+            ctx.beginPath()
+            for (let i = 0; i < spikes * 2; i++) {
+                const angle = (i * Math.PI) / spikes - Math.PI / 2
+                const rad = i % 2 === 0 ? r : r * 0.4
+                if (i === 0) ctx.moveTo(cx + Math.cos(angle) * rad, cy + Math.sin(angle) * rad)
+                else ctx.lineTo(cx + Math.cos(angle) * rad, cy + Math.sin(angle) * rad)
+            }
+            ctx.closePath()
+        },
+        circle: (ctx, cx, cy, r) => {
+            ctx.beginPath()
+            ctx.arc(cx, cy, r, 0, Math.PI * 2)
+        },
+        diamond: (ctx, cx, cy, r) => {
+            ctx.beginPath()
+            ctx.moveTo(cx, cy - r)
+            ctx.lineTo(cx + r * 0.7, cy)
+            ctx.lineTo(cx, cy + r)
+            ctx.lineTo(cx - r * 0.7, cy)
+            ctx.closePath()
+        },
+        hexagon: (ctx, cx, cy, r) => {
+            ctx.beginPath()
+            for (let i = 0; i < 6; i++) {
+                const angle = (i * Math.PI) / 3 - Math.PI / 6
+                const px = cx + Math.cos(angle) * r
+                const py = cy + Math.sin(angle) * r
+                if (i === 0) ctx.moveTo(px, py)
+                else ctx.lineTo(px, py)
+            }
+            ctx.closePath()
+        },
+        pentagon: (ctx, cx, cy, r) => {
+            ctx.beginPath()
+            for (let i = 0; i < 5; i++) {
+                const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2
+                const px = cx + Math.cos(angle) * r
+                const py = cy + Math.sin(angle) * r
+                if (i === 0) ctx.moveTo(px, py)
+                else ctx.lineTo(px, py)
+            }
+            ctx.closePath()
+        },
+        triangle: (ctx, cx, cy, r) => {
+            ctx.beginPath()
+            for (let i = 0; i < 3; i++) {
+                const angle = (i * 2 * Math.PI) / 3 - Math.PI / 2
+                if (i === 0) ctx.moveTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r)
+                else ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r)
+            }
+            ctx.closePath()
+        },
+        swoosh: (ctx, cx, cy, r) => {
+            ctx.beginPath()
+            ctx.moveTo(cx - r, cy + r * 0.3)
+            ctx.bezierCurveTo(cx - r * 0.3, cy - r * 0.8, cx + r * 0.3, cy - r * 0.6, cx + r, cy - r * 0.1)
+            ctx.bezierCurveTo(cx + r * 0.5, cy + r * 0.1, cx, cy + r * 0.3, cx - r * 0.6, cy + r * 0.5)
+            ctx.closePath()
+        },
+        wave: (ctx, cx, cy, r) => {
+            ctx.beginPath()
+            ctx.moveTo(cx - r, cy)
+            ctx.bezierCurveTo(cx - r * 0.5, cy - r * 0.8, cx, cy + r * 0.8, cx + r * 0.5, cy)
+            ctx.bezierCurveTo(cx + r * 0.7, cy - r * 0.3, cx + r, cy - r * 0.1, cx + r, cy + r * 0.2)
+            ctx.lineTo(cx + r, cy + r * 0.5)
+            ctx.bezierCurveTo(cx + r * 0.5, cy + r * 0.2, cx, cy + r * 1.1, cx - r * 0.5, cy + r * 0.3)
+            ctx.lineTo(cx - r, cy + r * 0.3)
+            ctx.closePath()
+        },
+        mapleLeaf: (ctx, cx, cy, r) => {
+            ctx.beginPath()
+            ctx.moveTo(cx, cy - r)
+            ctx.lineTo(cx + r * 0.15, cy - r * 0.65)
+            ctx.lineTo(cx + r * 0.5, cy - r * 0.7)
+            ctx.lineTo(cx + r * 0.35, cy - r * 0.4)
+            ctx.lineTo(cx + r * 0.8, cy - r * 0.25)
+            ctx.lineTo(cx + r * 0.5, cy - r * 0.05)
+            ctx.lineTo(cx + r * 0.6, cy + r * 0.35)
+            ctx.lineTo(cx + r * 0.3, cy + r * 0.25)
+            ctx.lineTo(cx + r * 0.15, cy + r * 0.6)
+            ctx.lineTo(cx, cy + r * 0.4)
+            ctx.lineTo(cx - r * 0.15, cy + r * 0.6)
+            ctx.lineTo(cx - r * 0.3, cy + r * 0.25)
+            ctx.lineTo(cx - r * 0.6, cy + r * 0.35)
+            ctx.lineTo(cx - r * 0.5, cy - r * 0.05)
+            ctx.lineTo(cx - r * 0.8, cy - r * 0.25)
+            ctx.lineTo(cx - r * 0.35, cy - r * 0.4)
+            ctx.lineTo(cx - r * 0.5, cy - r * 0.7)
+            ctx.lineTo(cx - r * 0.15, cy - r * 0.65)
+            ctx.closePath()
+        },
+        eagle: (ctx, cx, cy, r) => {
+            ctx.beginPath()
+            ctx.moveTo(cx, cy - r * 0.9)
+            ctx.bezierCurveTo(cx + r * 0.15, cy - r * 0.85, cx + r * 0.3, cy - r * 0.6, cx + r * 0.9, cy - r * 0.3)
+            ctx.bezierCurveTo(cx + r * 0.7, cy - r * 0.1, cx + r * 0.8, cy + r * 0.2, cx + r * 0.6, cy + r * 0.5)
+            ctx.bezierCurveTo(cx + r * 0.4, cy + r * 0.3, cx + r * 0.2, cy + r * 0.7, cx, cy + r * 0.9)
+            ctx.bezierCurveTo(cx - r * 0.2, cy + r * 0.7, cx - r * 0.4, cy + r * 0.3, cx - r * 0.6, cy + r * 0.5)
+            ctx.bezierCurveTo(cx - r * 0.8, cy + r * 0.2, cx - r * 0.7, cy - r * 0.1, cx - r * 0.9, cy - r * 0.3)
+            ctx.bezierCurveTo(cx - r * 0.3, cy - r * 0.6, cx - r * 0.15, cy - r * 0.85, cx, cy - r * 0.9)
+            ctx.closePath()
+        },
+        stripe: (ctx, cx, cy, r) => {
+            const w = r * 2, h = r * 0.35
+            ctx.beginPath()
+            ctx.rect(cx - w / 2, cy - h / 2, w, h)
+        },
+    }
+
+    function panelShapeStamp(panelIndex, uv, size, color, shapeName) {
+        const entry = panelCanvases.get(panelIndex)
+        if (!entry) return
+        const { ctx, texture } = entry
+        const cx = uv.x * PANEL_TEX_SIZE
+        const cy = (1 - uv.y) * PANEL_TEX_SIZE
+        const r = size * 2
+        const drawFn = SHAPE_PATHS[shapeName]
+        if (!drawFn) return
+        ctx.save()
+        ctx.fillStyle = color
+        drawFn(ctx, cx, cy, r)
+        ctx.fill()
+        ctx.restore()
+        texture.needsUpdate = true
+    }
+
+    function findMirrorPanel(worldPoint) {
+        if (!worldPoint || state.custViewMode === 'flat') return null
+        const localDir = previewBall.worldToLocal(worldPoint.clone()).normalize()
+        const antiDir = localDir.negate()
+        let bestIdx = -1, bestDot = -Infinity
+        for (let i = 0; i < state.custExplodePanels.length; i++) {
+            const d = antiDir.dot(state.custExplodePanels[i].centroidDir)
+            if (d > bestDot) { bestDot = d; bestIdx = i }
+        }
+        if (bestIdx < 0) return null
+        const uv = dirToLocalUV(antiDir, bestIdx)
+        return uv ? { panelIndex: bestIdx, uv } : null
+    }
+
+    function sampleAndSyncExternalBalls() {
+        for (const [panelIndex, entry] of panelCanvases) {
+            const { ctx, baseColor } = entry
+            if (!ctx) continue
+            const baseR = parseInt(baseColor.slice(1, 3), 16) || 0
+            const baseG = parseInt(baseColor.slice(3, 5), 16) || 0
+            const baseB = parseInt(baseColor.slice(5, 7), 16) || 0
+            const samples = [
+                [0.5, 0.5], [0.3, 0.3], [0.7, 0.7],
+                [0.3, 0.7], [0.7, 0.3], [0.5, 0.3],
+                [0.5, 0.7], [0.3, 0.5], [0.7, 0.5]
+            ]
+            for (const [fx, fy] of samples) {
+                const pixel = ctx.getImageData(
+                    Math.floor(fx * PANEL_TEX_SIZE),
+                    Math.floor(fy * PANEL_TEX_SIZE), 1, 1
+                ).data
+                if (pixel[3] < 20) continue
+                const dr = Math.abs(pixel[0] - baseR)
+                const dg = Math.abs(pixel[1] - baseG)
+                const db = Math.abs(pixel[2] - baseB)
+                if (dr + dg + db > 30) {
+                    const hex = '#' + ((1 << 24) + (pixel[0] << 16) + (pixel[1] << 8) + pixel[2]).toString(16).slice(1)
+                    setPanelColor(ballConfig.design, panelIndex, hex)
+                    break
+                }
+            }
+        }
+    }
+
+    function applyCanvasTexturesToExternalBall(group) {
+        if (!state.custExplodePanels || state.custExplodePanels.length === 0) return
+        for (const child of group.children) {
+            if (!child.isGroup || child.userData.panelIndex == null) continue
+            const panelIdx = child.userData.panelIndex
+            const fillMesh = child.children[0]
+            if (!fillMesh || !fillMesh.isMesh) continue
+            const entry = panelCanvases.get(panelIdx)
+            if (!entry) continue
+            const panel = state.custExplodePanels[panelIdx]
+            if (!panel?.centroidDir) continue
+            generatePanelUVs(fillMesh, panel.centroidDir, panelIdx)
+            fillMesh.material.dispose()
+            fillMesh.material = new THREE.MeshLambertMaterial({
+                map: entry.texture,
+                emissiveMap: entry.texture,
+                color: 0xffffff,
+                emissive: 0xffffff,
+                emissiveIntensity: 0.15,
+                side: THREE.DoubleSide
+            })
+        }
+    }
+
+    function refreshMainBall() {
+        const pos = getBallGroup().position.clone()
+        const rot = getBallGroup().rotation.clone()
+        mainScene.remove(getBallGroup())
+        const next = buildMainBall()
+        applyCanvasTexturesToExternalBall(next)
+        next.position.copy(pos)
+        next.rotation.copy(rot)
+        mainScene.add(next)
+        setBallGroup(next)
+        if (onBallChanged) onBallChanged()
+        updateResetButtonVisibility()
+    }
+
+    // =========================================================================
+    // Camera, renderer, controls
+    // =========================================================================
+
     const custCamera = new THREE.PerspectiveCamera(
         40,
         custViewport.clientWidth / (custViewport.clientHeight || 1),
@@ -176,7 +638,6 @@ export function createCustomizerPreview({
             if (child.isMesh) {
                 meshes.push(child)
             } else if (child.isGroup) {
-                // Panel groups: first child is the fill mesh, second is the border line
                 for (const sub of child.children) {
                     if (sub.isMesh) {
                         meshes.push(sub)
@@ -389,22 +850,17 @@ export function createCustomizerPreview({
             setSelectionHighlight(index, true)
             panelColorBtn.style.display = ''
 
-            // Set color input and swatch to panel's true color (not tinted by hover)
             const override = getPanelColor(ballConfig.design, index)
             let panelHex
             if (override) {
                 panelHex = override
             } else {
-                // Determine default color based on design and panel type
-                // Classic: panels 0-11 are pentagons (secondary), 12+ are hexagons (primary)
-                // Other designs: all panels use primary
                 const isPent = ballConfig.design === 'classic' && index < 12
                 panelHex = isPent ? ballConfig.secondaryColor : ballConfig.primaryColor
             }
             panelColorInput.value = panelHex
             panelColorBtn.style.backgroundColor = panelHex
 
-            // In 3D view, stop rotation and animate camera to face panel
             if (state.custViewMode !== 'flat') {
                 custControls.autoRotate = false
                 const panel = state.custExplodePanels[index]
@@ -418,7 +874,6 @@ export function createCustomizerPreview({
         } else {
             panelColorBtn.style.display = 'none'
 
-            // Resume rotation in 3D view
             if (state.custViewMode !== 'flat') {
                 custControls.autoRotate = true
                 state.cameraAnimTarget = null
@@ -431,7 +886,7 @@ export function createCustomizerPreview({
         panelResetBtn.style.display = hasOverrides(ballConfig.design) ? '' : 'none'
     }
 
-    // --- Raycaster click detection ---
+    // --- Raycaster click detection (for select / fill tools) ---
 
     let pointerDownPos = null
     let pointerDownResult = null
@@ -451,14 +906,12 @@ export function createCustomizerPreview({
         const hitRadius = state.custViewMode === 'flat' ? Infinity : previewRadius * 1.15
 
         if (distToAxis > hitRadius) {
-
             return null
         }
 
         if (state.custViewMode !== 'flat' && state.custExplodeFactor === 0 && ballConfig.design === 'classic') {
             const analyticPanelIndex = pickClosedBallPanelFromRay()
             if (analyticPanelIndex != null) return analyticPanelIndex
-
             return null
         }
 
@@ -475,12 +928,76 @@ export function createCustomizerPreview({
         return null
     }
 
+    // =========================================================================
+    // Unified pointer event handlers
+    // =========================================================================
+
     custCanvas.addEventListener('pointerdown', e => {
+        const tool = studioUI?.getActiveTool()
+        if (tool === 'brush' || tool === 'shape' || tool === 'mirrorShape') {
+            if (state.custViewMode === 'flat') {
+                custControls.enablePan = false
+                custControls.enableRotate = false
+            }
+        }
+    }, true)
+
+    custCanvas.addEventListener('pointerdown', e => {
+        const tool = studioUI?.getActiveTool()
+
+        if (tool === 'brush') {
+            painting = true
+            strokeBuffer.length = 0
+            strokePanelIndex = -1
+            custControls.enabled = false
+            custCanvas.style.cursor = 'crosshair'
+            const hit = raycastPanel(e)
+            paintingLockedPanel = hit ? hit.panelIndex : -1
+            if (hit) panelBrushStroke(hit.panelIndex, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
+            e.stopImmediatePropagation()
+            return
+        }
+
+        if (tool === 'shape') {
+            const hit = raycastPanel(e)
+            if (hit) {
+                panelShapeStamp(hit.panelIndex, hit.uv, studioUI.getShapeSize(), studioUI.getActiveColor(), studioUI.getActiveShape())
+                refreshMainBall()
+            }
+            e.stopImmediatePropagation()
+            return
+        }
+
+        if (tool === 'mirrorShape') {
+            const hit = raycastPanel(e)
+            if (hit) {
+                panelShapeStamp(hit.panelIndex, hit.uv, studioUI.getShapeSize(), studioUI.getActiveColor(), studioUI.getActiveShape())
+                if (state.custViewMode !== 'flat' && hit.point) {
+                    const mirror = findMirrorPanel(hit.point)
+                    if (mirror) panelShapeStamp(mirror.panelIndex, mirror.uv, studioUI.getShapeSize(), studioUI.getActiveColor(), studioUI.getActiveShape())
+                }
+                refreshMainBall()
+            }
+            e.stopImmediatePropagation()
+            return
+        }
+
         pointerDownPos = { x: e.clientX, y: e.clientY }
         pointerDownResult = doRaycast(e)
     })
 
     custCanvas.addEventListener('pointerup', e => {
+        if (painting) {
+            painting = false
+            paintingLockedPanel = -1
+            strokeBuffer.length = 0
+            strokePanelIndex = -1
+            custControls.enabled = true
+            if (state.custViewMode === 'flat') custControls.enablePan = true
+            custCanvas.style.cursor = studioUI?.getActiveTool() === 'brush' ? 'crosshair' : 'grab'
+            refreshMainBall()
+            return
+        }
         if (!pointerDownPos) return
         const dx = e.clientX - pointerDownPos.x
         const dy = e.clientY - pointerDownPos.y
@@ -491,7 +1008,6 @@ export function createCustomizerPreview({
             return
         }
 
-        // Let studio tools (fill, symmetric fill) handle the click first
         if (studioUI && pointerDownResult != null && studioUI.handlePanelClick(pointerDownResult)) {
             pointerDownResult = null
             return
@@ -505,9 +1021,28 @@ export function createCustomizerPreview({
         pointerDownResult = null
     })
 
-    // --- Hover highlight ---
+    // --- Hover highlight + brush painting ---
 
     custCanvas.addEventListener('pointermove', e => {
+        if (painting) {
+            e.preventDefault()
+            custControls.enabled = false
+            const hit = raycastPanel(e)
+            if (hit && hit.panelIndex === paintingLockedPanel) {
+                panelBrushStroke(hit.panelIndex, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
+            }
+            return
+        }
+
+        const currentTool = studioUI?.getActiveTool()
+        if (currentTool === 'brush' || currentTool === 'shape' || currentTool === 'mirrorShape') {
+            if (state.custViewMode === 'flat') custControls.enablePan = false
+            custCanvas.style.cursor = 'crosshair'
+            return
+        } else if (state.custViewMode === 'flat') {
+            custControls.enablePan = true
+        }
+
         const hoveredIndex = doRaycast(e)
 
         if (hoveredIndex !== state.hoveredPanelIndex) {
@@ -539,7 +1074,6 @@ export function createCustomizerPreview({
         panelColorInput.click()
     })
 
-    // Live preview — just update customizer preview materials (cheap)
     panelColorInput.addEventListener('input', e => {
         if (state.selectedPanelIndex == null) return
         const color = e.target.value
@@ -547,24 +1081,16 @@ export function createCustomizerPreview({
         panelColorBtn.style.backgroundColor = color
         updateResetButtonVisibility()
 
-        // Update customizer preview materials in-place (cheap, no rebuild)
-        if (state.custViewMode === 'flat') {
+        const entry = panelCanvases.get(state.selectedPanelIndex)
+        if (entry) {
+            entry.ctx.fillStyle = color
+            entry.ctx.fillRect(0, 0, PANEL_TEX_SIZE, PANEL_TEX_SIZE)
+            entry.baseColor = color
+            entry.texture.needsUpdate = true
+        }
+
+        if (state.custViewMode !== 'flat') {
             for (const child of previewBall.children) {
-                if (child.userData.panelIndex === state.selectedPanelIndex && child.isMesh) {
-                    child.material.color.set(color)
-                    child._selectSavedColor = new THREE.Color(color).getHex()
-                }
-            }
-        } else {
-            for (const child of previewBall.children) {
-                if (child.userData.panelIndex === state.selectedPanelIndex && child.isGroup) {
-                    const fillMesh = child.children[0]
-                    if (fillMesh) {
-                        fillMesh.material.color.set(color)
-                        fillMesh.material.emissive.set(color)
-                    }
-                }
-                // Also update stitching pentagon overlay if it exists
                 if (child.userData.stitchPanelIndex === state.selectedPanelIndex && child.isMesh) {
                     child.material.color.set(color)
                 }
@@ -572,10 +1098,18 @@ export function createCustomizerPreview({
         }
     })
 
-    // On picker close — rebuild everything with stitching (expensive, once)
     panelColorInput.addEventListener('change', e => {
         if (state.selectedPanelIndex == null) return
-        // Rebuild main scene ball
+        const color = e.target.value
+
+        const entry = panelCanvases.get(state.selectedPanelIndex)
+        if (entry) {
+            entry.ctx.fillStyle = color
+            entry.ctx.fillRect(0, 0, PANEL_TEX_SIZE, PANEL_TEX_SIZE)
+            entry.baseColor = color
+            entry.texture.needsUpdate = true
+        }
+
         const pos = getBallGroup().position.clone()
         const rot = getBallGroup().rotation.clone()
         mainScene.remove(getBallGroup())
@@ -585,7 +1119,7 @@ export function createCustomizerPreview({
         mainScene.add(next)
         setBallGroup(next)
         if (onBallChanged) onBallChanged()
-        // Rebuild customizer preview (so stitching picks up the color)
+
         if (state.custViewMode !== 'flat') {
             custScene.remove(previewBall)
             const result = buildExplodedBall(ballConfig, previewRadius)
@@ -594,6 +1128,7 @@ export function createCustomizerPreview({
             applyExplodeFactor(state.custExplodePanels, state.custExplodeFactor)
             if (state.custExplodeFactor === 0) addStitching(previewBall, ballConfig, previewRadius)
             custScene.add(previewBall)
+            initBrushTextures()
             if (state.selectedPanelIndex != null) setSelectionHighlight(state.selectedPanelIndex, true)
         }
     })
@@ -603,6 +1138,7 @@ export function createCustomizerPreview({
     panelResetBtn.addEventListener('click', e => {
         e.stopPropagation()
         clearPanelColors(ballConfig.design)
+        panelCanvases.clear()
         selectPanel(null)
         updateResetButtonVisibility()
         updateBall()
@@ -716,11 +1252,11 @@ export function createCustomizerPreview({
     function updateBall() {
         if (state.custViewMode === 'ball' || state.custViewMode !== 'flat') rememberBallCameraPose()
 
-        // Rebuild main scene ball + spin ball immediately after customizer
         const pos = getBallGroup().position.clone()
         const rot = getBallGroup().rotation.clone()
         mainScene.remove(getBallGroup())
         const next = buildMainBall()
+        applyCanvasTexturesToExternalBall(next)
         next.position.copy(pos)
         next.rotation.copy(rot)
         mainScene.add(next)
@@ -762,8 +1298,8 @@ export function createCustomizerPreview({
             restoreBallCameraPose()
         }
         custScene.add(previewBall)
+        initBrushTextures()
 
-        // Re-apply selection highlight if still selected
         if (state.selectedPanelIndex != null) {
             setSelectionHighlight(state.selectedPanelIndex, true)
         }
@@ -795,7 +1331,6 @@ export function createCustomizerPreview({
                 return
             }
 
-            // Rebuild when crossing zero boundary (stitching add/remove)
             const crossedZero = (prev === 0) !== (state.custExplodeFactor === 0)
             if (crossedZero) {
                 updateBall()
@@ -818,16 +1353,15 @@ export function createCustomizerPreview({
         document.querySelectorAll('.design-btn[data-design]').forEach(btn => {
             btn.addEventListener('click', () => {
                 ballConfig.design = btn.dataset.design
+                panelCanvases.clear()
                 document.querySelectorAll('.design-btn[data-design]').forEach(b => {
                     b.classList.toggle('active', b.dataset.design === ballConfig.design)
                 })
-                // Sync studio preset buttons
                 document.querySelectorAll('.studio-preset').forEach(b => {
                     b.classList.toggle('active', b.dataset.design === ballConfig.design)
                 })
                 selectPanel(null)
                 updateBall()
-                // Re-render patterns for the new design
                 if (studioUI) studioUI.renderPatterns()
             })
         })
@@ -857,7 +1391,10 @@ export function createCustomizerPreview({
         document.getElementById('primary-color-detail')?.addEventListener('input', (e) => syncBaseColor(e.target, 'primary-color'))
         document.getElementById('secondary-color-detail')?.addEventListener('input', (e) => syncBaseColor(e.target, 'secondary-color'))
 
-        const colorChangeHandler = () => updateBall()
+        const colorChangeHandler = () => {
+            invalidateCanvases('all')
+            updateBall()
+        }
         document.getElementById('primary-color')?.addEventListener('change', colorChangeHandler)
         document.getElementById('secondary-color')?.addEventListener('change', colorChangeHandler)
         document.getElementById('primary-color-detail')?.addEventListener('change', colorChangeHandler)
@@ -878,7 +1415,9 @@ export function createCustomizerPreview({
         if (state.custViewMode === 'ball') rememberBallCameraPose()
     })
 
-    const studioUI = createStudioUI({ ballConfig, updateBall, selectPanel })
+    const studioUI = createStudioUI({ ballConfig, updateBall, selectPanel, invalidateCanvases })
+
+    initBrushTextures()
 
     return {
         studioUI,
@@ -891,6 +1430,7 @@ export function createCustomizerPreview({
         wireExplodeSlider,
         wireCustomizerUi,
         animateCamera,
-        debugAfterControlsUpdate
+        debugAfterControlsUpdate,
+        applyCanvasTextures: applyCanvasTexturesToExternalBall
     }
 }

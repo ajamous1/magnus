@@ -12,96 +12,115 @@ const PATTERNS = {
     classic: [
         { name: 'Default', colors: {} },
         {
-            name: 'World Cup',
-            primary: '#ffffff', secondary: '#222222',
+            name: 'Traditional',
+            primary: '#ffffff', secondary: '#1a1a1a',
             colors: { 0:'#1a1a1a', 1:'#1a1a1a', 2:'#1a1a1a', 3:'#1a1a1a', 4:'#1a1a1a', 5:'#1a1a1a', 6:'#1a1a1a', 7:'#1a1a1a', 8:'#1a1a1a', 9:'#1a1a1a', 10:'#1a1a1a', 11:'#1a1a1a' }
         },
         {
-            name: 'Al Rihla',
-            primary: '#f0ece0', secondary: '#1a4a6a',
-            colors: { 0:'#1a4a6a', 1:'#b82030', 2:'#1a4a6a', 3:'#b82030', 4:'#1a4a6a', 5:'#b82030', 6:'#1a4a6a', 7:'#b82030', 8:'#1a4a6a', 9:'#b82030', 10:'#1a4a6a', 11:'#b82030',
-                      12:'#f0ece0', 13:'#d4a840', 14:'#f0ece0', 15:'#1a4a6a', 16:'#f0ece0', 17:'#d4a840', 18:'#f0ece0', 19:'#1a4a6a' }
+            name: 'Telstar',
+            primary: '#f5f2ea', secondary: '#1a1a1a',
+            colors: { 0:'#111111', 1:'#111111', 2:'#111111', 3:'#111111', 4:'#111111', 5:'#111111', 6:'#111111', 7:'#111111', 8:'#111111', 9:'#111111', 10:'#111111', 11:'#111111',
+                      12:'#f5f2ea', 13:'#f5f2ea', 14:'#f5f2ea', 15:'#f5f2ea', 16:'#f5f2ea', 17:'#f5f2ea', 18:'#f5f2ea', 19:'#f5f2ea', 20:'#f5f2ea', 21:'#f5f2ea', 22:'#f5f2ea', 23:'#f5f2ea', 24:'#f5f2ea', 25:'#f5f2ea', 26:'#f5f2ea', 27:'#f5f2ea', 28:'#f5f2ea', 29:'#f5f2ea', 30:'#f5f2ea', 31:'#f5f2ea' }
         },
         {
-            name: 'Neon Night',
+            name: 'Tango',
+            primary: '#f5f0e8', secondary: '#2a2a2a',
+            colors: { 0:'#2a2a2a', 1:'#2a2a2a', 2:'#2a2a2a', 3:'#2a2a2a', 4:'#2a2a2a', 5:'#2a2a2a', 6:'#2a2a2a', 7:'#2a2a2a', 8:'#2a2a2a', 9:'#2a2a2a', 10:'#2a2a2a', 11:'#2a2a2a',
+                      12:'#d4c8b0', 13:'#f5f0e8', 14:'#d4c8b0', 15:'#f5f0e8', 16:'#d4c8b0', 17:'#f5f0e8', 18:'#d4c8b0', 19:'#f5f0e8', 20:'#d4c8b0', 21:'#f5f0e8', 22:'#d4c8b0', 23:'#f5f0e8', 24:'#d4c8b0', 25:'#f5f0e8', 26:'#d4c8b0', 27:'#f5f0e8', 28:'#d4c8b0', 29:'#f5f0e8', 30:'#d4c8b0', 31:'#f5f0e8' }
+        },
+        {
+            name: 'Neon',
             primary: '#0a0a0a', secondary: '#00ffaa',
-            colors: { 0:'#00ffaa', 1:'#00ffaa', 2:'#00ffaa', 3:'#00ffaa', 4:'#00ffaa', 5:'#00ffaa', 6:'#00ffaa', 7:'#00ffaa', 8:'#00ffaa', 9:'#00ffaa', 10:'#00ffaa', 11:'#00ffaa' }
-        },
-        {
-            name: 'Sunset',
-            primary: '#fff0dd', secondary: '#cc3322',
-            colors: { 0:'#ff5533', 1:'#ff3355', 2:'#ff7722', 3:'#ff5533', 4:'#ff3355', 5:'#ff7722', 6:'#ff5533', 7:'#ff3355', 8:'#ff7722', 9:'#ff5533', 10:'#ff3355', 11:'#ff7722' }
+            colors: { 0:'#00ffaa', 1:'#00ff66', 2:'#00ffaa', 3:'#00ff66', 4:'#00ffaa', 5:'#00ff66', 6:'#00ffaa', 7:'#00ff66', 8:'#00ffaa', 9:'#00ff66', 10:'#00ffaa', 11:'#00ff66' }
         },
     ],
     brazuca: [
         { name: 'Default', colors: {} },
         {
-            // Real Brazuca: white base, each panel has colored swooshes
-            // Panels: +X(0), -X(1), +Y(2), -Y(3), +Z(4), -Z(5)
-            // Approximation: alternating panels get dominant accent colors
             name: 'WC 2014',
             primary: '#f5f0ea', secondary: '#1a1a1a',
-            colors: { 0:'#e84420', 1:'#1a6633', 2:'#f5f0ea', 3:'#1a2266', 4:'#f5f0ea', 5:'#e84420' }
+            colors: { 0:'#e84420', 1:'#1a6633', 2:'#f5f0ea', 3:'#2244aa', 4:'#e84420', 5:'#1a6633' }
         },
         {
-            name: 'Brazuca Final',
-            primary: '#f5f0ea', secondary: '#8b7340',
-            colors: { 0:'#c8a84a', 1:'#2a2a2a', 2:'#f5f0ea', 3:'#c8a84a', 4:'#2a2a2a', 5:'#f5f0ea' }
+            name: 'Final Rio',
+            primary: '#f0ece0', secondary: '#8b7340',
+            colors: { 0:'#c8a84a', 1:'#1a1a1a', 2:'#c8a84a', 3:'#1a1a1a', 4:'#c8a84a', 5:'#1a1a1a' }
         },
         {
-            name: 'Fire',
-            primary: '#220800', secondary: '#ff4400',
+            name: 'Winter',
+            primary: '#e8e8ee', secondary: '#334455',
+            colors: { 0:'#cc3322', 1:'#334455', 2:'#e8e8ee', 3:'#cc3322', 4:'#334455', 5:'#e8e8ee' }
+        },
+        {
+            name: 'Ember',
+            primary: '#1a0800', secondary: '#ff4400',
             colors: { 0:'#ff2200', 1:'#ff6600', 2:'#ffaa00', 3:'#ff2200', 4:'#ff6600', 5:'#ffaa00' }
         },
         {
-            name: 'Ocean',
-            primary: '#002244', secondary: '#00aacc',
-            colors: { 0:'#003366', 1:'#005588', 2:'#0077aa', 3:'#0099cc', 4:'#00bbdd', 5:'#44ccee' }
+            name: 'Deep Sea',
+            primary: '#001828', secondary: '#006688',
+            colors: { 0:'#003355', 1:'#005577', 2:'#007799', 3:'#0099bb', 4:'#00bbcc', 5:'#44ddee' }
         },
     ],
     jabulani: [
         { name: 'Default', colors: {} },
         {
-            // Real Jabulani: white base, 4 triangles have colored accents (gold/green/red/blue bands)
-            // Hex panels stay mostly white, triangles get accent colors
             name: 'WC 2010',
             primary: '#f5f2ea', secondary: '#333333',
             colors: { 0:'#d4a020', 1:'#228833', 2:'#cc2233', 3:'#1a4488', 4:'#f5f2ea', 5:'#f5f2ea', 6:'#f5f2ea', 7:'#f5f2ea' }
         },
         {
-            name: 'Jabulani Winter',
-            primary: '#e8e0d0', secondary: '#444444',
-            colors: { 0:'#cc3322', 1:'#cc3322', 2:'#cc3322', 3:'#cc3322', 4:'#e8e0d0', 5:'#e8e0d0', 6:'#e8e0d0', 7:'#e8e0d0' }
+            name: 'Jo\'burg Gold',
+            primary: '#f0ece0', secondary: '#8b7340',
+            colors: { 0:'#c8a030', 1:'#c8a030', 2:'#c8a030', 3:'#c8a030', 4:'#f0ece0', 5:'#f0ece0', 6:'#f0ece0', 7:'#f0ece0' }
         },
         {
-            name: 'Galaxy',
-            primary: '#0e0e1e', secondary: '#4422aa',
+            name: 'Angola',
+            primary: '#f5f2ea', secondary: '#444444',
+            colors: { 0:'#cc3322', 1:'#1a1a1a', 2:'#cc3322', 3:'#1a1a1a', 4:'#f5f2ea', 5:'#f5f2ea', 6:'#f5f2ea', 7:'#f5f2ea' }
+        },
+        {
+            name: 'Vuvuzela',
+            primary: '#f0ece0', secondary: '#333333',
+            colors: { 0:'#dd6622', 1:'#22aa55', 2:'#dd6622', 3:'#22aa55', 4:'#ffcc00', 5:'#ffcc00', 6:'#ffcc00', 7:'#ffcc00' }
+        },
+        {
+            name: 'Eclipse',
+            primary: '#0e0e1e', secondary: '#333355',
             colors: { 0:'#6622cc', 1:'#cc2266', 2:'#2266cc', 3:'#22cc66', 4:'#0e0e1e', 5:'#0e0e1e', 6:'#0e0e1e', 7:'#0e0e1e' }
         },
     ],
     trionda: [
         { name: 'Default', colors: {} },
         {
-            // Real Trionda: white base, 4 panels each with different color theme
-            // Panel 0 (opp vertex 0) = red/maroon, Panel 1 = green, Panel 2 = blue, Panel 3 = maroon
             name: 'WC 2026',
             primary: '#f0ece4', secondary: '#222222',
             colors: { 0:'#cc2233', 1:'#22884a', 2:'#2255aa', 3:'#6a2244' }
         },
         {
-            name: 'Trionda Training',
-            primary: '#f0ece4', secondary: '#333333',
-            colors: { 0:'#cc3333', 1:'#33aa55', 2:'#3366cc', 3:'#888822' }
+            name: 'USA',
+            primary: '#f0ece4', secondary: '#1a2a5a',
+            colors: { 0:'#bb2233', 1:'#f0ece4', 2:'#1a2a5a', 3:'#bb2233' }
         },
         {
-            name: 'Stealth',
-            primary: '#111111', secondary: '#2a2a2a',
-            colors: { 0:'#1a1a1a', 1:'#2a2a2a', 2:'#1a1a1a', 3:'#2a2a2a' }
+            name: 'Mexico',
+            primary: '#f0ece4', secondary: '#1a4a2a',
+            colors: { 0:'#006847', 1:'#f0ece4', 2:'#ce1126', 3:'#006847' }
         },
         {
-            name: 'Candy',
-            primary: '#fff5f0', secondary: '#ff66aa',
-            colors: { 0:'#ff66aa', 1:'#66ccff', 2:'#ffcc44', 3:'#88ff66' }
+            name: 'Canada',
+            primary: '#f0ece4', secondary: '#cc2233',
+            colors: { 0:'#cc2233', 1:'#f0ece4', 2:'#cc2233', 3:'#f0ece4' }
+        },
+        {
+            name: 'Midnight',
+            primary: '#111118', secondary: '#2a2a3a',
+            colors: { 0:'#1a1a2a', 1:'#2a2a3a', 2:'#1a1a2a', 3:'#2a2a3a' }
+        },
+        {
+            name: 'Carnival',
+            primary: '#fff5f0', secondary: '#333333',
+            colors: { 0:'#ff4466', 1:'#44ccff', 2:'#ffcc22', 3:'#44ff88' }
         },
     ]
 }
@@ -130,9 +149,9 @@ const SYMMETRY_GROUPS = {
 /**
  * Studio toolbar controller for the fullscreen customizer.
  */
-export function createStudioUI({ ballConfig, updateBall, selectPanel }) {
+export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidateCanvases }) {
     let activeTool = 'select'
-    let activeColor = '#ffffff'
+    let activeColor = '#cc2233'
     let activePatternIdx = -1
 
     function getPatterns() {
@@ -144,6 +163,7 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel }) {
     function fillPanel(index) {
         if (index == null) return
         setPanelColor(ballConfig.design, index, activeColor)
+        if (invalidateCanvases) invalidateCanvases(index)
         updateBall()
     }
 
@@ -153,17 +173,14 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel }) {
         const group = groups.find(g => g.includes(index))
         if (group) {
             group.forEach(i => setPanelColor(ballConfig.design, i, activeColor))
+            if (invalidateCanvases) invalidateCanvases(group)
         } else {
             setPanelColor(ballConfig.design, index, activeColor)
+            if (invalidateCanvases) invalidateCanvases(index)
         }
         updateBall()
     }
 
-    /**
-     * Called by the click handler when a panel is clicked.
-     * Returns true if the tool handled the click (fill/symmetricFill),
-     * false if the default select behavior should proceed.
-     */
     function handlePanelClick(index) {
         if (activeTool === 'fill') {
             fillPanel(index)
@@ -175,6 +192,10 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel }) {
         }
         return false
     }
+
+    function getActiveColor() { return activeColor }
+    function getActiveTool() { return activeTool }
+    function getBrushSize() { return parseInt(document.getElementById('tb-brush-size')?.value || '12') }
 
     // --- Dropdown management ---
 
@@ -239,6 +260,7 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel }) {
         const pat = patterns[index]
         if (!pat) return
 
+        if (invalidateCanvases) invalidateCanvases('all')
         clearPanelColors(ballConfig.design)
         if (pat.primary) {
             ballConfig.primaryColor = pat.primary
@@ -270,9 +292,22 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel }) {
                 document.querySelectorAll('.tb-btn[data-tool]').forEach(b => {
                     b.classList.toggle('active', b.dataset.tool === activeTool)
                 })
+                const brushControls = document.getElementById('tb-brush-controls')
+                const shapeControls = document.getElementById('tb-shape-controls')
+                if (brushControls) brushControls.style.display = activeTool === 'brush' ? '' : 'none'
+                if (shapeControls) shapeControls.style.display = (activeTool === 'shape' || activeTool === 'mirrorShape') ? '' : 'none'
+            })
+        })
+
+        document.querySelectorAll('.tb-shape-opt').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tb-shape-opt').forEach(b => b.classList.toggle('active', b === btn))
+                activeShape = btn.dataset.shape
             })
         })
     }
+
+    let activeShape = 'star'
 
     function wireDropdowns() {
         document.getElementById('tb-swatch-toggle')?.addEventListener('click', e => {
@@ -297,26 +332,25 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel }) {
     }
 
     function wireSwatches() {
+        const paintInput = document.getElementById('tb-paint-color')
+
         document.querySelectorAll('.tb-swatch').forEach(btn => {
             btn.addEventListener('click', () => {
                 activeColor = btn.dataset.color
-                const primary = document.getElementById('primary-color-detail')
-                if (primary) {
-                    primary.value = activeColor
-                    primary.dispatchEvent(new Event('input'))
-                }
+                if (paintInput) paintInput.value = activeColor
                 closeAllDropdowns()
             })
         })
-        // Sync active color from the primary color well
-        document.getElementById('primary-color-detail')?.addEventListener('input', () => {
-            activeColor = document.getElementById('primary-color-detail').value
+
+        paintInput?.addEventListener('input', () => {
+            activeColor = paintInput.value
         })
     }
 
     function wireReset() {
         document.getElementById('studio-reset-btn')?.addEventListener('click', () => {
             clearPanelColors(ballConfig.design)
+            if (invalidateCanvases) invalidateCanvases('all')
             activePatternIdx = -1
             document.querySelectorAll('.tb-pattern').forEach(p => p.classList.remove('active'))
             selectPanel(null)
@@ -332,5 +366,8 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel }) {
         renderPatterns()
     }
 
-    return { init, getActiveTool: () => activeTool, handlePanelClick, renderPatterns }
+    function getShapeSize() { return parseInt(document.getElementById('tb-shape-size')?.value || '25') }
+    function getActiveShape() { return activeShape }
+
+    return { init, getActiveTool, handlePanelClick, renderPatterns, getActiveColor, getBrushSize, getShapeSize, getActiveShape }
 }
