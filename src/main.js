@@ -367,8 +367,8 @@ function onPointerUp(e) {
 
     const flickDist = Math.sqrt(dx * dx + dy * dy)
     const normalizedDist = flickDist / sizes.height
-    const flickSpeed = Math.min(normalizedDist / dt, 3)
-    const normalizedPower = Math.min(flickSpeed * 0.55, 1) * debugParams.powerMultiplier
+    const flickSpeed = Math.min(normalizedDist / dt, 4)
+    const normalizedPower = Math.min(flickSpeed * 0.36, 1) * debugParams.powerMultiplier
     const aimX = -(dx / sizes.width) * goalWidth * 0.85
 
     const flickAngle = Math.atan2(dy, Math.abs(dx) + 1)
