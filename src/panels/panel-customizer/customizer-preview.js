@@ -76,7 +76,7 @@ export function createCustomizerPreview({
     // Unified per-panel canvas brush system
     // =========================================================================
 
-    const PANEL_TEX_SIZE = 512
+    const PANEL_TEX_SIZE = 1024
     const panelCanvases = new Map()
     const panelUVBases = new Map()
     let painting = false
@@ -145,6 +145,9 @@ export function createCustomizerPreview({
         ctx.fillRect(0, 0, PANEL_TEX_SIZE, PANEL_TEX_SIZE)
         const texture = new THREE.CanvasTexture(canvas2d)
         texture.colorSpace = THREE.SRGBColorSpace
+        texture.minFilter = THREE.LinearMipmapLinearFilter
+        texture.magFilter = THREE.LinearFilter
+        texture.anisotropy = 8
         const entry = { canvas: canvas2d, ctx, texture, baseColor }
         panelCanvases.set(panelIndex, entry)
         return entry
@@ -216,6 +219,26 @@ export function createCustomizerPreview({
                 })
                 fillMesh.userData._brushTex = entry.texture
                 fillMesh.userData._brushCtx = entry.ctx
+            }
+
+            // Also texture stitching overlay meshes (e.g. classic pentagon caps)
+            for (const child of previewBall.children) {
+                if (!child.isMesh || child.userData.stitchPanelIndex == null) continue
+                const panelIdx = child.userData.stitchPanelIndex
+                const panel = state.custExplodePanels[panelIdx]
+                if (!panel?.centroidDir) continue
+                const entry = panelCanvases.get(panelIdx)
+                if (!entry) continue
+                generatePanelUVs(child, panel.centroidDir, panelIdx)
+                child.material.dispose()
+                child.material = new THREE.MeshLambertMaterial({
+                    map: entry.texture,
+                    emissiveMap: entry.texture,
+                    color: 0xffffff,
+                    emissive: 0xffffff,
+                    emissiveIntensity: 0.15,
+                    side: THREE.DoubleSide
+                })
             }
         }
     }
@@ -495,24 +518,44 @@ export function createCustomizerPreview({
     function applyCanvasTexturesToExternalBall(group) {
         if (!state.custExplodePanels || state.custExplodePanels.length === 0) return
         for (const child of group.children) {
-            if (!child.isGroup || child.userData.panelIndex == null) continue
-            const panelIdx = child.userData.panelIndex
-            const fillMesh = child.children[0]
-            if (!fillMesh || !fillMesh.isMesh) continue
-            const entry = panelCanvases.get(panelIdx)
-            if (!entry) continue
-            const panel = state.custExplodePanels[panelIdx]
-            if (!panel?.centroidDir) continue
-            generatePanelUVs(fillMesh, panel.centroidDir, panelIdx)
-            fillMesh.material.dispose()
-            fillMesh.material = new THREE.MeshLambertMaterial({
-                map: entry.texture,
-                emissiveMap: entry.texture,
-                color: 0xffffff,
-                emissive: 0xffffff,
-                emissiveIntensity: 0.15,
-                side: THREE.DoubleSide
-            })
+            // Panel groups (fill mesh inside)
+            if (child.isGroup && child.userData.panelIndex != null) {
+                const panelIdx = child.userData.panelIndex
+                const fillMesh = child.children[0]
+                if (!fillMesh || !fillMesh.isMesh) continue
+                const entry = panelCanvases.get(panelIdx)
+                if (!entry) continue
+                const panel = state.custExplodePanels[panelIdx]
+                if (!panel?.centroidDir) continue
+                generatePanelUVs(fillMesh, panel.centroidDir, panelIdx)
+                fillMesh.material.dispose()
+                fillMesh.material = new THREE.MeshLambertMaterial({
+                    map: entry.texture,
+                    emissiveMap: entry.texture,
+                    color: 0xffffff,
+                    emissive: 0xffffff,
+                    emissiveIntensity: 0.15,
+                    side: THREE.DoubleSide
+                })
+            }
+            // Stitching overlay meshes (e.g. classic pentagon caps)
+            if (child.isMesh && child.userData.stitchPanelIndex != null) {
+                const panelIdx = child.userData.stitchPanelIndex
+                const panel = state.custExplodePanels[panelIdx]
+                if (!panel?.centroidDir) continue
+                const entry = panelCanvases.get(panelIdx)
+                if (!entry) continue
+                generatePanelUVs(child, panel.centroidDir, panelIdx)
+                child.material.dispose()
+                child.material = new THREE.MeshLambertMaterial({
+                    map: entry.texture,
+                    emissiveMap: entry.texture,
+                    color: 0xffffff,
+                    emissive: 0xffffff,
+                    emissiveIntensity: 0.15,
+                    side: THREE.DoubleSide
+                })
+            }
         }
     }
 
