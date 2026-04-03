@@ -13,7 +13,7 @@ import { createDebugParams } from './panels/panel-debug/debug-params.js'
 import { createDebugGui } from './panels/panel-debug/create-debug-gui.js'
 import { createPitchEnvironment } from './panels/panel-shooter/pitch-environment.js'
 import { createGoal } from './panels/panel-shooter/goal.js'
-import { createForceVectorOverlay } from './panels/panel-shooter/force-vector-overlay.js'
+
 import { createFlightAnalyticsPanels } from './panels/flight-analytics.js'
 import { createDragTrailRibbon } from './panels/panel-shooter/drag-trail-ribbon.js'
 import { createKickShot } from './panels/panel-shooter/kick-shot.js'
@@ -32,7 +32,6 @@ const flightDynamics = {
     panel: document.getElementById('panel-flight-dynamics'),
     canvas: document.querySelector('canvas.flight-dynamics-canvas')
 }
-const vectorLegend = document.getElementById('vector-legend')
 
 const scene = new THREE.Scene()
 scene.background = new THREE.Color('#000000')
@@ -113,18 +112,7 @@ const kickPhysics = {
     activeVelocityVec: new THREE.Vector3(0, 0, 0)
 }
 
-const { updateForceVectors } = createForceVectorOverlay({
-    scene,
-    vectorLegend,
-    debugParams,
-    getKickState: () => ({
-        isKicking: kickPhysics.isKicking,
-        ballGroup,
-        activeVelocityVec: kickPhysics.activeVelocityVec,
-        activeCurveForce: kickPhysics.activeCurveForce,
-        activeLateralAccel: kickPhysics.activeLateralAccel
-    })
-})
+const updateForceVectors = () => {}
 
 const { updateFluidFlowOverlay } = createFluidFlowOverlay({
     scene,
@@ -189,7 +177,6 @@ const {
 
 const debugGui = createDebugGui(document.getElementById('debug-overlay'), debugParams, {
     onOrbitControlsChange: (v) => { controls.enabled = v },
-    onVectorFolderChange: () => updateForceVectors(),
     onVisualFilterChange: () => applyVisualFilter()
 })
 
@@ -369,19 +356,23 @@ function onPointerUp(e) {
     if (dy < 30) return
 
     let curveAmount = 0
-    if (dragPoints.length >= 5) {
+    if (dragPoints.length >= 3) {
         const start = dragPoints[0]
         const end = dragPoints[dragPoints.length - 1]
         const mid = dragPoints[Math.floor(dragPoints.length / 2)]
         const lineX = (start.x + end.x) / 2
-        curveAmount = (mid.x - lineX) / sizes.width * -27.5
+        curveAmount = (mid.x - lineX) / sizes.width * -16
     }
 
     const speed = Math.min(Math.sqrt(dx * dx + dy * dy) / dt, 2000)
     const normalizedPower = Math.min(speed / 1000, 1) * debugParams.powerMultiplier
-    const aimX = -(dx / sizes.width) * goalWidth * 1.2
+    const aimX = -(dx / sizes.width) * goalWidth * 0.85
 
-    kick(normalizedPower, aimX, curveAmount)
+    const flickAngle = Math.atan2(dy, Math.abs(dx) + 1)
+    const heightFactor = Math.max(0, Math.min(1, (flickAngle / (Math.PI / 2)) * 1.3 - 0.2))
+    const aimY = heightFactor * goalHeight * 0.95
+
+    kick(normalizedPower, aimX, curveAmount, aimY)
 }
 
 canvas.addEventListener('pointerdown', onPointerDown)

@@ -30,7 +30,7 @@ export function createKickShot({
     const GOAL_Z = 0
     const NET_DEPTH = 2.5
 
-    function kick(power, aimX, curve) {
+    function kick(power, aimX, curve, aimY = 0) {
         // Kill any in-progress kick
         cancelKick()
 
@@ -51,7 +51,7 @@ export function createKickShot({
         const arcPeak = debugParams.arcHeight * finalPower * finalPower * 3.5 / debugParams.gravity * (design.arcModifier || 1)
         const targetZ = 1 + finalPower * 2
 
-        const curveStrength = curve * goalWidth * 1.84 * debugParams.curveIntensity * design.drag * (design.curveMultiplier || 1)
+        const curveStrength = curve * goalWidth * 1.1 * debugParams.curveIntensity * (design.curveMultiplier || 1)
         kickPhysics.activeCurveForce = curveStrength
         const wind = debugParams.windSpeed
         const steps = 60
@@ -91,9 +91,10 @@ export function createKickShot({
             }
             const z = ballStartPosition.z + (targetZ - ballStartPosition.z) * easedT * zSpeed
 
-            let x = (1 - t) * (1 - t) * 0 + 2 * (1 - t) * t * curveStrength + t * t * finalX
+            const curveFade = 1 - t * t * 0.45
+            let x = 2 * (1 - t) * t * curveStrength * curveFade + t * t * finalX
                 + wind * t * t * 0.5
-            let y = ballRadius + arcPeak * 4 * t * (1 - t) * debugParams.gravity
+            let y = ballRadius + arcPeak * 4 * t * (1 - t) * debugParams.gravity + aimY * t
 
             if (knuckleActive && t > swerveBreakT) {
                 const swerveProgress = Math.min(1, (t - swerveBreakT) / 0.4)

@@ -33,15 +33,6 @@ export function createDebugGui(container, debugParams, hooks) {
     settingsFolder.add(debugParams, 'orbitControls').name('Orbit Controls').onChange(hooks.onOrbitControlsChange)
     settingsFolder.close()
 
-    const vectorsFolder = gui.addFolder('Vectors')
-    vectorsFolder.add(debugParams, 'vectorOverlay').name('Show Vectors').onChange(hooks.onVectorFolderChange)
-    vectorsFolder.add(debugParams, 'showVelocityVector').name('Velocity').onChange(hooks.onVectorFolderChange)
-    vectorsFolder.add(debugParams, 'showMagnusVector').name('Magnus').onChange(hooks.onVectorFolderChange)
-    vectorsFolder.add(debugParams, 'showDragVector').name('Drag').onChange(hooks.onVectorFolderChange)
-    vectorsFolder.add(debugParams, 'showGravityVector').name('Gravity').onChange(hooks.onVectorFolderChange)
-    vectorsFolder.add(debugParams, 'showWindVector').name('Wind').onChange(hooks.onVectorFolderChange)
-    vectorsFolder.close()
-
     const spinFolder = gui.addFolder('Spin Preview')
     const speedCtrl = spinFolder.add(debugParams, 'spinSpeed', 1, 50, 1).name('Speed')
     const axisXCtrl = spinFolder.add(debugParams, 'spinAxisX', -1, 1, 0.05).name('Axis X')
