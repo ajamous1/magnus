@@ -76,7 +76,7 @@ export function createCustomizerPreview({
     // Unified per-panel canvas brush system
     // =========================================================================
 
-    const PANEL_TEX_SIZE = 1024
+    const PANEL_TEX_SIZE = window.innerWidth <= 768 ? 512 : 1024
     const designCanvasStore = new Map()
     let panelCanvases = new Map()
     designCanvasStore.set(ballConfig.design, panelCanvases)
@@ -1050,10 +1050,19 @@ export function createCustomizerPreview({
 
     // --- Hover highlight + brush painting ---
 
+    const isMobile = window.innerWidth <= 768
+    let lastPaintTime = 0
+    const paintThrottleMs = isMobile ? 16 : 0
+
     custCanvas.addEventListener('pointermove', e => {
         if (painting) {
             e.preventDefault()
             custControls.enabled = false
+            if (paintThrottleMs > 0) {
+                const now = performance.now()
+                if (now - lastPaintTime < paintThrottleMs) return
+                lastPaintTime = now
+            }
             const hit = raycastPanel(e)
             if (hit && hit.panelIndex === paintingLockedPanel) {
                 panelBrushStroke(hit.panelIndex, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
