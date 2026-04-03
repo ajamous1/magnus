@@ -129,7 +129,7 @@ const PATTERNS = {
  * Symmetry groups: panels that are structurally identical.
  * Filling one panel in a group fills them all.
  */
-const SYMMETRY_GROUPS = {
+export const SYMMETRY_GROUPS = {
     classic: [
         [0,1,2,3,4,5,6,7,8,9,10,11],      // all pentagons
         [12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31] // all hexagons
@@ -151,6 +151,7 @@ const SYMMETRY_GROUPS = {
  */
 export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidateCanvases }) {
     let activeTool = 'select'
+    let mirrorMode = false
     let activeColor = '#cc2233'
     let activePatternIdx = -1
 
@@ -158,22 +159,26 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidate
         return PATTERNS[ballConfig.design] || []
     }
 
+    function getSymmetryPeers(panelIndex) {
+        const groups = SYMMETRY_GROUPS[ballConfig.design] || []
+        const group = groups.find(g => g.includes(panelIndex))
+        return group ? group.filter(i => i !== panelIndex) : []
+    }
+
     // --- Fill operations ---
 
     function fillPanel(index) {
         if (index == null) return
-        setPanelColor(ballConfig.design, index, activeColor)
-        if (invalidateCanvases) invalidateCanvases(index)
-        updateBall()
-    }
-
-    function symmetricFillPanel(index) {
-        if (index == null) return
-        const groups = SYMMETRY_GROUPS[ballConfig.design] || []
-        const group = groups.find(g => g.includes(index))
-        if (group) {
-            group.forEach(i => setPanelColor(ballConfig.design, i, activeColor))
-            if (invalidateCanvases) invalidateCanvases(group)
+        if (mirrorMode) {
+            const groups = SYMMETRY_GROUPS[ballConfig.design] || []
+            const group = groups.find(g => g.includes(index))
+            if (group) {
+                group.forEach(i => setPanelColor(ballConfig.design, i, activeColor))
+                if (invalidateCanvases) invalidateCanvases(group)
+            } else {
+                setPanelColor(ballConfig.design, index, activeColor)
+                if (invalidateCanvases) invalidateCanvases(index)
+            }
         } else {
             setPanelColor(ballConfig.design, index, activeColor)
             if (invalidateCanvases) invalidateCanvases(index)
@@ -184,10 +189,6 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidate
     function handlePanelClick(index) {
         if (activeTool === 'fill') {
             fillPanel(index)
-            return true
-        }
-        if (activeTool === 'symmetricFill') {
-            symmetricFillPanel(index)
             return true
         }
         return false
@@ -286,16 +287,24 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidate
     // --- Wiring ---
 
     function wireTools() {
+        const mirrorBtn = document.querySelector('.tb-btn[data-tool="mirror"]')
+
         document.querySelectorAll('.tb-btn[data-tool]').forEach(btn => {
             btn.addEventListener('click', () => {
+                if (btn.dataset.tool === 'mirror') {
+                    mirrorMode = !mirrorMode
+                    btn.classList.toggle('active', mirrorMode)
+                    return
+                }
                 activeTool = btn.dataset.tool
                 document.querySelectorAll('.tb-btn[data-tool]').forEach(b => {
+                    if (b.dataset.tool === 'mirror') return
                     b.classList.toggle('active', b.dataset.tool === activeTool)
                 })
                 const brushControls = document.getElementById('tb-brush-controls')
                 const shapeControls = document.getElementById('tb-shape-controls')
                 if (brushControls) brushControls.style.display = activeTool === 'brush' ? '' : 'none'
-                if (shapeControls) shapeControls.style.display = (activeTool === 'shape' || activeTool === 'mirrorShape') ? '' : 'none'
+                if (shapeControls) shapeControls.style.display = activeTool === 'shape' ? '' : 'none'
             })
         })
 
@@ -369,5 +378,7 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidate
     function getShapeSize() { return parseInt(document.getElementById('tb-shape-size')?.value || '25') }
     function getActiveShape() { return activeShape }
 
-    return { init, getActiveTool, handlePanelClick, renderPatterns, getActiveColor, getBrushSize, getShapeSize, getActiveShape }
+    function isMirrorMode() { return mirrorMode }
+
+    return { init, getActiveTool, handlePanelClick, renderPatterns, getActiveColor, getBrushSize, getShapeSize, getActiveShape, isMirrorMode, getSymmetryPeers }
 }

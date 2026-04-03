@@ -91,11 +91,11 @@
                                 <span class="tb-label">Select</span>
                             </button>
                             <button class="tb-btn" data-tool="fill" title="Fill panel">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+                                <svg viewBox="0 -960 960 960" fill="currentColor" width="24" height="24"><path d="m247-904 57-56 343 343q23 23 23 57t-23 57L457-313q-23 23-57 23t-57-23L153-503q-23-23-23-57t23-57l190-191-96-96Zm153 153L209-560h382L400-751Zm303.5 447.5Q680-327 680-360q0-21 12.5-45t27.5-45q9-12 19-25t21-25q11 12 21 25t19 25q15 21 27.5 45t12.5 45q0 33-23.5 56.5T760-280q-33 0-56.5-23.5ZM80 0v-160h800V0H80Z"/></svg>
                                 <span class="tb-label">Fill</span>
                             </button>
-                            <button class="tb-btn" data-tool="symmetricFill" title="Fill matching panels">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/><line x1="4" y1="12" x2="20" y2="12" stroke-dasharray="2 2"/></svg>
+                            <button class="tb-btn" data-tool="mirror" title="Mirror mode — actions apply to all matching panels">
+                                <svg viewBox="0 -960 960 960" fill="currentColor" width="24" height="24"><path d="M360-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h160v80H200v560h160v80Zm80 80v-880h80v880h-80Zm160-80v-80h80v80h-80Zm0-640v-80h80v80h-80Zm160 640v-80h80q0 33-23.5 56.5T760-120Zm0-160v-80h80v80h-80Zm0-160v-80h80v80h-80Zm0-160v-80h80v80h-80Zm0-160v-80q33 0 56.5 23.5T840-760h-80Z"/></svg>
                                 <span class="tb-label">Mirror</span>
                             </button>
                             <button class="tb-btn" data-tool="brush" title="Paint on ball">
@@ -103,12 +103,8 @@
                                 <span class="tb-label">Brush</span>
                             </button>
                             <button class="tb-btn" data-tool="shape" title="Stamp shape">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 22,20 2,20"/></svg>
+                                <svg viewBox="0 -960 960 960" fill="currentColor" width="24" height="24"><path d="M600-360ZM320-242q10 1 19.5 1.5t20.5.5q11 0 20.5-.5T400-242v82h400v-400h-82q1-10 1.5-19.5t.5-20.5q0-11-.5-20.5T718-640h82q33 0 56.5 23.5T880-560v400q0 33-23.5 56.5T800-80H400q-33 0-56.5-23.5T320-160v-82ZM161.5-401.5Q80-483 80-600t81.5-198.5Q243-880 360-880t198.5 81.5Q640-717 640-600t-81.5 198.5Q477-320 360-320t-198.5-81.5Zm340-57Q560-517 560-600t-58.5-141.5Q443-800 360-800t-141.5 58.5Q160-683 160-600t58.5 141.5Q277-400 360-400t141.5-58.5ZM360-600Z"/></svg>
                                 <span class="tb-label">Shape</span>
-                            </button>
-                            <button class="tb-btn" data-tool="mirrorShape" title="Stamp shape mirrored">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 22,20 2,20"/><line x1="12" y1="1" x2="12" y2="23" stroke-dasharray="2 2"/></svg>
-                                <span class="tb-label">Mirror&nbsp;Shape</span>
                             </button>
 
                             <div class="studio-toolbar-divider"></div>
@@ -128,32 +124,25 @@
                                 </div>
                             </div>
 
-                            <div class="studio-toolbar-divider"></div>
-
                             <div class="tb-brush-controls" id="tb-brush-controls" style="display:none">
                                 <label class="tb-slider-group">
                                     <span class="tb-label">Size</span>
-                                    <input type="range" class="tb-range" id="tb-brush-size" min="2" max="40" value="12">
+                                    <input type="range" class="tb-range" id="tb-brush-size" min="2" max="80" value="12">
                                 </label>
                             </div>
 
                             <div class="tb-shape-controls" id="tb-shape-controls" style="display:none">
                                 <div class="tb-shape-picker">
-                                    <button class="tb-shape-opt active" data-shape="star" title="Star">&#9733;</button>
-                                    <button class="tb-shape-opt" data-shape="circle" title="Circle">&#9679;</button>
-                                    <button class="tb-shape-opt" data-shape="diamond" title="Diamond">&#9670;</button>
-                                    <button class="tb-shape-opt" data-shape="hexagon" title="Hexagon">&#11042;</button>
-                                    <button class="tb-shape-opt" data-shape="pentagon" title="Pentagon">&#11039;</button>
+                                    <button class="tb-shape-opt" data-shape="circle" title="Circle" style="font-size:24px">&#9679;</button>
                                     <button class="tb-shape-opt" data-shape="triangle" title="Triangle">&#9650;</button>
-                                    <button class="tb-shape-opt" data-shape="swoosh" title="Swoosh">&#10077;</button>
-                                    <button class="tb-shape-opt" data-shape="wave" title="Wave">&#8776;</button>
-                                    <button class="tb-shape-opt" data-shape="stripe" title="Stripe">&#9644;</button>
-                                    <button class="tb-shape-opt" data-shape="mapleLeaf" title="Maple Leaf">&#127809;</button>
-                                    <button class="tb-shape-opt" data-shape="eagle" title="Eagle">&#129413;</button>
+                                    <button class="tb-shape-opt" data-shape="diamond" title="Diamond" style="font-size:24px">&#9670;</button>
+                                    <button class="tb-shape-opt active" data-shape="star" title="Star">&#9733;</button>
+                                    <button class="tb-shape-opt" data-shape="pentagon" title="Pentagon">&#11039;</button>
+                                    <button class="tb-shape-opt" data-shape="hexagon" title="Hexagon" style="font-size:24px">&#11042;</button>
                                 </div>
                                 <label class="tb-slider-group">
                                     <span class="tb-label">Size</span>
-                                    <input type="range" class="tb-range" id="tb-shape-size" min="5" max="60" value="25">
+                                    <input type="range" class="tb-range" id="tb-shape-size" min="5" max="120" value="25">
                                 </label>
                             </div>
 
@@ -175,7 +164,7 @@
 
                             <div style="position:relative">
                                 <button class="tb-btn" id="tb-explode-toggle" title="Explode view">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+                                    <svg viewBox="0 -960 960 960" fill="currentColor" width="24" height="24"><path d="m480-281 59-59h81v-81l59-59-59-59v-81h-81l-59-59-59 59h-81v81l-59 59 59 59v81h81l59 59Zm0 253L346-160H160v-186L28-480l132-134v-186h186l134-132 134 132h186v186l132 134-132 134v186H614L480-28Zm0-112 100-100h140v-140l100-100-100-100v-140H580L480-820 380-720H240v140L140-480l100 100v140h140l100 100Zm0-340Z"/></svg>
                                     <span class="tb-label">Explode</span>
                                 </button>
                                 <div class="tb-explode-slider" id="tb-explode-slider">
@@ -208,19 +197,11 @@
             </div>
             <div class="resize-handle resize-v"></div>
             <div class="bento-panel" id="panel-birdseye">
-                <button class="panel-fs-btn" title="Toggle fullscreen">
-                    <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-                    <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
-                </button>
                 <canvas class="birdseye-canvas"></canvas>
                 <div class="birdseye-label">Birdseye Tracker</div>
             </div>
             <div class="resize-handle resize-v"></div>
             <div class="bento-panel" id="panel-flight-dynamics">
-                <button class="panel-fs-btn" title="Toggle fullscreen">
-                    <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-                    <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7"/></svg>
-                </button>
                 <canvas class="flight-dynamics-canvas"></canvas>
                 <div class="flight-dynamics-stats">
                     <div class="flight-dynamics-stat"><span>Peak V</span><strong id="metric-power">--</strong></div>

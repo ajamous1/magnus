@@ -77,11 +77,18 @@ export function createCustomizerPreview({
     // =========================================================================
 
     const PANEL_TEX_SIZE = 1024
-    const panelCanvases = new Map()
+    const designCanvasStore = new Map()
+    let panelCanvases = new Map()
+    designCanvasStore.set(ballConfig.design, panelCanvases)
+
+    function switchDesignCanvases(design) {
+        if (!designCanvasStore.has(design)) designCanvasStore.set(design, new Map())
+        panelCanvases = designCanvasStore.get(design)
+    }
     const panelUVBases = new Map()
     let painting = false
     let paintingLockedPanel = -1
-    const strokeBuffer = []
+    const strokeBuffers = new Map()
     let strokePanelIndex = -1
 
     function generatePanelUVs(fillMesh, centroidDir, panelIndex) {
@@ -313,20 +320,18 @@ export function createCustomizerPreview({
     }
 
     function panelBrushStroke(panelIndex, uv, size, color) {
-        if (strokePanelIndex !== panelIndex) {
-            strokeBuffer.length = 0
-            strokePanelIndex = panelIndex
-        }
-        strokeBuffer.push(uv)
-        if (strokeBuffer.length < 2) {
+        if (!strokeBuffers.has(panelIndex)) strokeBuffers.set(panelIndex, [])
+        const buf = strokeBuffers.get(panelIndex)
+        buf.push(uv)
+        if (buf.length < 2) {
             panelBrushStamp(panelIndex, uv, size, color)
             return
         }
-        const len = strokeBuffer.length
-        const p0 = strokeBuffer[Math.max(0, len - 4)]
-        const p1 = strokeBuffer[Math.max(0, len - 3)]
-        const p2 = strokeBuffer[len - 2]
-        const p3 = strokeBuffer[len - 1]
+        const len = buf.length
+        const p0 = buf[Math.max(0, len - 4)]
+        const p1 = buf[Math.max(0, len - 3)]
+        const p2 = buf[len - 2]
+        const p3 = buf[len - 1]
         const dx = (p3.x - p2.x) * PANEL_TEX_SIZE
         const dy = (p3.y - p2.y) * PANEL_TEX_SIZE
         const segDist = Math.sqrt(dx * dx + dy * dy)
@@ -397,60 +402,49 @@ export function createCustomizerPreview({
             }
             ctx.closePath()
         },
-        swoosh: (ctx, cx, cy, r) => {
-            ctx.beginPath()
-            ctx.moveTo(cx - r, cy + r * 0.3)
-            ctx.bezierCurveTo(cx - r * 0.3, cy - r * 0.8, cx + r * 0.3, cy - r * 0.6, cx + r, cy - r * 0.1)
-            ctx.bezierCurveTo(cx + r * 0.5, cy + r * 0.1, cx, cy + r * 0.3, cx - r * 0.6, cy + r * 0.5)
-            ctx.closePath()
-        },
-        wave: (ctx, cx, cy, r) => {
-            ctx.beginPath()
-            ctx.moveTo(cx - r, cy)
-            ctx.bezierCurveTo(cx - r * 0.5, cy - r * 0.8, cx, cy + r * 0.8, cx + r * 0.5, cy)
-            ctx.bezierCurveTo(cx + r * 0.7, cy - r * 0.3, cx + r, cy - r * 0.1, cx + r, cy + r * 0.2)
-            ctx.lineTo(cx + r, cy + r * 0.5)
-            ctx.bezierCurveTo(cx + r * 0.5, cy + r * 0.2, cx, cy + r * 1.1, cx - r * 0.5, cy + r * 0.3)
-            ctx.lineTo(cx - r, cy + r * 0.3)
-            ctx.closePath()
-        },
         mapleLeaf: (ctx, cx, cy, r) => {
+            const s = r / 18
+            ctx.save()
+            ctx.translate(cx, cy)
+            ctx.scale(s, s)
+            ctx.beginPath()
+            ctx.moveTo(0, -18)
+            ctx.lineTo(1.5, -12)
+            ctx.lineTo(7, -13)
+            ctx.lineTo(5, -7)
+            ctx.lineTo(13, -4)
+            ctx.lineTo(8, -1)
+            ctx.lineTo(10, 6)
+            ctx.lineTo(5, 4)
+            ctx.lineTo(2.5, 11)
+            ctx.lineTo(0, 7)
+            ctx.lineTo(-2.5, 11)
+            ctx.lineTo(-5, 4)
+            ctx.lineTo(-10, 6)
+            ctx.lineTo(-8, -1)
+            ctx.lineTo(-13, -4)
+            ctx.lineTo(-5, -7)
+            ctx.lineTo(-7, -13)
+            ctx.lineTo(-1.5, -12)
+            ctx.closePath()
+            ctx.restore()
+        },
+        brazuca: (ctx, cx, cy, r) => {
+            ctx.beginPath()
+            ctx.moveTo(cx - r * 0.8, cy - r * 0.5)
+            ctx.bezierCurveTo(cx - r * 0.3, cy - r * 0.9, cx + r * 0.3, cy + r * 0.1, cx + r * 0.8, cy - r * 0.5)
+            ctx.bezierCurveTo(cx + r * 0.9, cy + r * 0.1, cx + r * 0.3, cy + r * 0.9, cx + r * 0.8, cy + r * 0.5)
+            ctx.bezierCurveTo(cx + r * 0.3, cy + r * 0.9, cx - r * 0.3, cy - r * 0.1, cx - r * 0.8, cy + r * 0.5)
+            ctx.bezierCurveTo(cx - r * 0.9, cy - r * 0.1, cx - r * 0.3, cy - r * 0.9, cx - r * 0.8, cy - r * 0.5)
+            ctx.closePath()
+        },
+        jabulani: (ctx, cx, cy, r) => {
             ctx.beginPath()
             ctx.moveTo(cx, cy - r)
-            ctx.lineTo(cx + r * 0.15, cy - r * 0.65)
-            ctx.lineTo(cx + r * 0.5, cy - r * 0.7)
-            ctx.lineTo(cx + r * 0.35, cy - r * 0.4)
-            ctx.lineTo(cx + r * 0.8, cy - r * 0.25)
-            ctx.lineTo(cx + r * 0.5, cy - r * 0.05)
-            ctx.lineTo(cx + r * 0.6, cy + r * 0.35)
-            ctx.lineTo(cx + r * 0.3, cy + r * 0.25)
-            ctx.lineTo(cx + r * 0.15, cy + r * 0.6)
-            ctx.lineTo(cx, cy + r * 0.4)
-            ctx.lineTo(cx - r * 0.15, cy + r * 0.6)
-            ctx.lineTo(cx - r * 0.3, cy + r * 0.25)
-            ctx.lineTo(cx - r * 0.6, cy + r * 0.35)
-            ctx.lineTo(cx - r * 0.5, cy - r * 0.05)
-            ctx.lineTo(cx - r * 0.8, cy - r * 0.25)
-            ctx.lineTo(cx - r * 0.35, cy - r * 0.4)
-            ctx.lineTo(cx - r * 0.5, cy - r * 0.7)
-            ctx.lineTo(cx - r * 0.15, cy - r * 0.65)
+            ctx.bezierCurveTo(cx + r * 0.6, cy - r * 0.8, cx + r, cy - r * 0.2, cx + r * 0.7, cy + r * 0.5)
+            ctx.bezierCurveTo(cx + r * 0.4, cy + r, cx - r * 0.4, cy + r, cx - r * 0.7, cy + r * 0.5)
+            ctx.bezierCurveTo(cx - r, cy - r * 0.2, cx - r * 0.6, cy - r * 0.8, cx, cy - r)
             ctx.closePath()
-        },
-        eagle: (ctx, cx, cy, r) => {
-            ctx.beginPath()
-            ctx.moveTo(cx, cy - r * 0.9)
-            ctx.bezierCurveTo(cx + r * 0.15, cy - r * 0.85, cx + r * 0.3, cy - r * 0.6, cx + r * 0.9, cy - r * 0.3)
-            ctx.bezierCurveTo(cx + r * 0.7, cy - r * 0.1, cx + r * 0.8, cy + r * 0.2, cx + r * 0.6, cy + r * 0.5)
-            ctx.bezierCurveTo(cx + r * 0.4, cy + r * 0.3, cx + r * 0.2, cy + r * 0.7, cx, cy + r * 0.9)
-            ctx.bezierCurveTo(cx - r * 0.2, cy + r * 0.7, cx - r * 0.4, cy + r * 0.3, cx - r * 0.6, cy + r * 0.5)
-            ctx.bezierCurveTo(cx - r * 0.8, cy + r * 0.2, cx - r * 0.7, cy - r * 0.1, cx - r * 0.9, cy - r * 0.3)
-            ctx.bezierCurveTo(cx - r * 0.3, cy - r * 0.6, cx - r * 0.15, cy - r * 0.85, cx, cy - r * 0.9)
-            ctx.closePath()
-        },
-        stripe: (ctx, cx, cy, r) => {
-            const w = r * 2, h = r * 0.35
-            ctx.beginPath()
-            ctx.rect(cx - w / 2, cy - h / 2, w, h)
         },
     }
 
@@ -469,20 +463,6 @@ export function createCustomizerPreview({
         ctx.fill()
         ctx.restore()
         texture.needsUpdate = true
-    }
-
-    function findMirrorPanel(worldPoint) {
-        if (!worldPoint || state.custViewMode === 'flat') return null
-        const localDir = previewBall.worldToLocal(worldPoint.clone()).normalize()
-        const antiDir = localDir.negate()
-        let bestIdx = -1, bestDot = -Infinity
-        for (let i = 0; i < state.custExplodePanels.length; i++) {
-            const d = antiDir.dot(state.custExplodePanels[i].centroidDir)
-            if (d > bestDot) { bestDot = d; bestIdx = i }
-        }
-        if (bestIdx < 0) return null
-        const uv = dirToLocalUV(antiDir, bestIdx)
-        return uv ? { panelIndex: bestIdx, uv } : null
     }
 
     function sampleAndSyncExternalBalls() {
@@ -621,13 +601,15 @@ export function createCustomizerPreview({
         let flatLastY = 0
         custCanvas.addEventListener('mousedown', e => {
             if (state.custViewMode !== 'flat') return
+            const tool = studioUI?.getActiveTool()
+            if (tool === 'brush' || tool === 'shape') return
             flatDragging = true
             flatLastX = e.clientX
             flatLastY = e.clientY
             e.stopPropagation()
         })
         window.addEventListener('mousemove', e => {
-            if (!flatDragging || state.custViewMode !== 'flat' || !previewBall) return
+            if (!flatDragging || painting || state.custViewMode !== 'flat' || !previewBall) return
             const dx = e.clientX - flatLastX
             flatLastX = e.clientX
             flatLastY = e.clientY
@@ -636,6 +618,8 @@ export function createCustomizerPreview({
         window.addEventListener('mouseup', () => { flatDragging = false })
         custCanvas.addEventListener('touchstart', e => {
             if (state.custViewMode !== 'flat' || e.touches.length !== 1) return
+            const tool = studioUI?.getActiveTool()
+            if (tool === 'brush' || tool === 'shape') return
             flatDragging = true
             flatLastX = e.touches[0].clientX
             flatLastY = e.touches[0].clientY
@@ -977,7 +961,7 @@ export function createCustomizerPreview({
 
     custCanvas.addEventListener('pointerdown', e => {
         const tool = studioUI?.getActiveTool()
-        if (tool === 'brush' || tool === 'shape' || tool === 'mirrorShape') {
+        if (tool === 'brush' || tool === 'shape') {
             if (state.custViewMode === 'flat') {
                 custControls.enablePan = false
                 custControls.enableRotate = false
@@ -987,16 +971,23 @@ export function createCustomizerPreview({
 
     custCanvas.addEventListener('pointerdown', e => {
         const tool = studioUI?.getActiveTool()
+        const mirror = studioUI?.isMirrorMode()
 
         if (tool === 'brush') {
             painting = true
-            strokeBuffer.length = 0
-            strokePanelIndex = -1
+            strokeBuffers.clear()
             custControls.enabled = false
             custCanvas.style.cursor = 'crosshair'
             const hit = raycastPanel(e)
             paintingLockedPanel = hit ? hit.panelIndex : -1
-            if (hit) panelBrushStroke(hit.panelIndex, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
+            if (hit) {
+                panelBrushStroke(hit.panelIndex, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
+                if (mirror) {
+                    for (const peer of studioUI.getSymmetryPeers(hit.panelIndex)) {
+                        panelBrushStroke(peer, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
+                    }
+                }
+            }
             e.stopImmediatePropagation()
             return
         }
@@ -1004,20 +995,14 @@ export function createCustomizerPreview({
         if (tool === 'shape') {
             const hit = raycastPanel(e)
             if (hit) {
-                panelShapeStamp(hit.panelIndex, hit.uv, studioUI.getShapeSize(), studioUI.getActiveColor(), studioUI.getActiveShape())
-                refreshMainBall()
-            }
-            e.stopImmediatePropagation()
-            return
-        }
-
-        if (tool === 'mirrorShape') {
-            const hit = raycastPanel(e)
-            if (hit) {
-                panelShapeStamp(hit.panelIndex, hit.uv, studioUI.getShapeSize(), studioUI.getActiveColor(), studioUI.getActiveShape())
-                if (state.custViewMode !== 'flat' && hit.point) {
-                    const mirror = findMirrorPanel(hit.point)
-                    if (mirror) panelShapeStamp(mirror.panelIndex, mirror.uv, studioUI.getShapeSize(), studioUI.getActiveColor(), studioUI.getActiveShape())
+                const size = studioUI.getShapeSize()
+                const color = studioUI.getActiveColor()
+                const shape = studioUI.getActiveShape()
+                panelShapeStamp(hit.panelIndex, hit.uv, size, color, shape)
+                if (mirror) {
+                    for (const peer of studioUI.getSymmetryPeers(hit.panelIndex)) {
+                        panelShapeStamp(peer, hit.uv, size, color, shape)
+                    }
                 }
                 refreshMainBall()
             }
@@ -1033,8 +1018,7 @@ export function createCustomizerPreview({
         if (painting) {
             painting = false
             paintingLockedPanel = -1
-            strokeBuffer.length = 0
-            strokePanelIndex = -1
+            strokeBuffers.clear()
             custControls.enabled = true
             if (state.custViewMode === 'flat') custControls.enablePan = true
             custCanvas.style.cursor = studioUI?.getActiveTool() === 'brush' ? 'crosshair' : 'grab'
@@ -1073,12 +1057,17 @@ export function createCustomizerPreview({
             const hit = raycastPanel(e)
             if (hit && hit.panelIndex === paintingLockedPanel) {
                 panelBrushStroke(hit.panelIndex, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
+                if (studioUI?.isMirrorMode()) {
+                    for (const peer of studioUI.getSymmetryPeers(hit.panelIndex)) {
+                        panelBrushStroke(peer, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
+                    }
+                }
             }
             return
         }
 
         const currentTool = studioUI?.getActiveTool()
-        if (currentTool === 'brush' || currentTool === 'shape' || currentTool === 'mirrorShape') {
+        if (currentTool === 'brush' || currentTool === 'shape') {
             if (state.custViewMode === 'flat') custControls.enablePan = false
             custCanvas.style.cursor = 'crosshair'
             return
@@ -1396,7 +1385,7 @@ export function createCustomizerPreview({
         document.querySelectorAll('.design-btn[data-design]').forEach(btn => {
             btn.addEventListener('click', () => {
                 ballConfig.design = btn.dataset.design
-                panelCanvases.clear()
+                switchDesignCanvases(ballConfig.design)
                 document.querySelectorAll('.design-btn[data-design]').forEach(b => {
                     b.classList.toggle('active', b.dataset.design === ballConfig.design)
                 })

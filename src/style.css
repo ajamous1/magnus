@@ -321,7 +321,7 @@ body {
 #panel-customizer.zoomed-out .customizer-controls {
     flex-shrink: 0;
     border-top: none;
-    padding: 0 0 20px;
+    padding: 0 0 6px;
     overflow: visible;
     background: transparent;
     align-items: center;
@@ -346,7 +346,7 @@ body {
     align-items: center;
     gap: 6px;
     padding: 6px 44px;
-    background: #0c1016;
+    background: #0a0a0a;
     height: 56px;
     border-radius: 14px;
     border: 1px solid #1e2830;
@@ -429,8 +429,8 @@ body {
     align-items: center;
 }
 .tb-shape-opt {
-    width: 28px;
-    height: 28px;
+    width: 34px;
+    height: 34px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -438,7 +438,7 @@ body {
     border: 1.5px solid transparent;
     border-radius: 6px;
     color: #6680a0;
-    font-size: 14px;
+    font-size: 20px;
     cursor: pointer;
     padding: 0;
     transition: all 0.1s;
@@ -469,6 +469,19 @@ body {
     padding: 0;
     transition: border-color 0.12s;
     flex-shrink: 0;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: none;
+}
+.tb-color::-webkit-color-swatch-wrapper { padding: 0; }
+.tb-color::-webkit-color-swatch {
+    border: none;
+    border-radius: 5px;
+}
+.tb-color::-moz-color-swatch {
+    border: none;
+    border-radius: 5px;
 }
 .tb-color:hover { border-color: #5a6a7a; }
 
@@ -562,9 +575,10 @@ body {
 .tb-design-group {
     display: flex;
     background: #0e1520;
-    border-radius: 6px;
+    border-radius: 8px;
     border: 1px solid #1e2830;
-    overflow: hidden;
+    padding: 3px;
+    gap: 2px;
 }
 .tb-design-btn {
     background: transparent;
@@ -573,19 +587,21 @@ body {
     font-size: 10px;
     font-family: inherit;
     font-weight: 600;
-    padding: 6px 10px;
+    padding: 5px 10px;
+    border-radius: 5px;
     cursor: pointer;
     transition: all 0.12s;
 }
 .tb-design-btn:hover { color: #99aabb; background: #161e28; }
-.tb-design-btn.active { background: #1a3a5a; color: #70b0ff; }
+.tb-design-btn.active { background: #2a4060; color: #70b0ff; }
 
 .tb-view-group {
     display: flex;
     background: #0e1520;
-    border-radius: 6px;
+    border-radius: 8px;
     border: 1px solid #1e2830;
-    overflow: hidden;
+    padding: 3px;
+    gap: 2px;
 }
 .tb-view-btn {
     background: transparent;
@@ -594,12 +610,13 @@ body {
     font-size: 11px;
     font-family: inherit;
     font-weight: 600;
-    padding: 6px 12px;
+    padding: 5px 12px;
+    border-radius: 5px;
     cursor: pointer;
     transition: all 0.12s;
 }
-.tb-view-btn:hover { color: #8899aa; }
-.tb-view-btn.active { background: #1a2a3a; color: #b0d0ff; }
+.tb-view-btn:hover { color: #8899aa; background: #161e28; }
+.tb-view-btn.active { background: #2a4060; color: #b0d0ff; }
 
 /* Explode slider in toolbar */
 .tb-explode-slider {
@@ -1061,9 +1078,9 @@ body {
     right: 48px;
 }
 
-#panel-customizer.fullscreen .panel-reset-btn {
-    top: 12px;
-    left: 12px;
+#panel-customizer.fullscreen .panel-reset-btn,
+#panel-customizer.zoomed-out .panel-reset-btn {
+    display: none !important;
 }
 
 /* Panel content placeholder */
