@@ -1480,56 +1480,60 @@ body {
         font-size: 8px;
     }
 
-    /* Mobile studio toolbar: two-row wrapped layout */
+    /* Mobile studio toolbar */
     .studio-toolbar {
-        padding: 4px 6px;
-        gap: 3px 4px;
-        height: auto;
-        border-radius: 10px;
-        width: 100%;
-        max-width: 100vw;
         flex-wrap: wrap;
         justify-content: center;
+        padding: 8px 10px;
+        gap: 6px 8px;
+        height: auto;
+        width: 100%;
+        max-width: 100vw;
+        border-radius: 14px;
         flex-shrink: 0;
         overflow: visible;
     }
 
-    .studio-toolbar-divider {
-        display: none;
-    }
+    .studio-toolbar-divider { display: none; }
 
+    /* Larger touch targets */
     .tb-btn {
-        min-width: 34px;
-        height: 34px;
-        padding: 2px 4px;
-        gap: 1px;
+        min-width: 44px;
+        height: 44px;
+        padding: 4px 6px;
+        gap: 2px;
+        border-radius: 10px;
     }
-    .tb-btn svg { width: 15px; height: 15px; }
-    .tb-label { font-size: 6.5px; }
+    .tb-btn svg { width: 18px; height: 18px; }
+    .tb-label { font-size: 7.5px; }
 
-    .tb-color {
-        width: 24px;
-        height: 24px;
-        border-radius: 5px;
-    }
-    .tb-color-group { gap: 3px; }
+    /* Colors */
+    .tb-color { width: 28px; height: 28px; border-radius: 6px; }
+    .tb-color-group { gap: 6px; }
     .tb-color-well { gap: 1px; }
 
+    /* Design + view pills */
     .tb-design-group, .tb-view-group {
+        border-radius: 8px;
+        padding: 3px;
+    }
+    .tb-design-btn {
+        padding: 6px 10px;
+        font-size: 11px;
         border-radius: 6px;
     }
-    .tb-design-btn, .tb-view-btn {
-        padding: 3px 7px;
-        font-size: 9px;
-    }
-
-    .tb-shape-opt {
-        width: 22px;
-        height: 22px;
+    .tb-view-btn {
+        padding: 6px 14px;
         font-size: 11px;
-        border-radius: 4px;
+        border-radius: 6px;
     }
-    .tb-range { width: 50px; }
 
-    .tb-brush-controls, .tb-shape-controls { gap: 4px; }
+    /* Shape picker + sliders */
+    .tb-shape-opt { width: 30px; height: 30px; font-size: 16px; border-radius: 6px; }
+    .tb-range { width: 70px; }
+    .tb-brush-controls, .tb-shape-controls {
+        gap: 6px;
+        flex-basis: 100%;
+        justify-content: center;
+    }
 }
