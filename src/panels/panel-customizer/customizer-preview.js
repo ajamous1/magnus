@@ -38,7 +38,8 @@ export function createCustomizerPreview({
         selectedPanelIndex: null,
         hoveredPanelIndex: null,
         cameraAnimTarget: null,
-        cameraAnimTargetSpherical: null
+        cameraAnimTargetSpherical: null,
+        flatPanTarget: null
     }
 
     const custCanvas = document.querySelector('canvas.customizer-preview')
@@ -84,6 +85,64 @@ export function createCustomizerPreview({
     function switchDesignCanvases(design) {
         if (!designCanvasStore.has(design)) designCanvasStore.set(design, new Map())
         panelCanvases = designCanvasStore.get(design)
+    }
+
+    // --- Undo / Redo ---
+    const undoStack = []
+    const redoStack = []
+    const MAX_UNDO = 30
+
+    function captureCanvasState(panelIndex) {
+        const entry = panelCanvases.get(panelIndex)
+        if (!entry) return null
+        return { panelIndex, imageData: entry.ctx.getImageData(0, 0, PANEL_TEX_SIZE, PANEL_TEX_SIZE) }
+    }
+
+    function pushUndoSnapshot(panelIndices) {
+        const indices = Array.isArray(panelIndices) ? panelIndices : [panelIndices]
+        const snapshots = []
+        for (const idx of indices) {
+            const snap = captureCanvasState(idx)
+            if (snap) snapshots.push(snap)
+        }
+        if (snapshots.length === 0) return
+        undoStack.push(snapshots)
+        if (undoStack.length > MAX_UNDO) undoStack.shift()
+        redoStack.length = 0
+    }
+
+    function performUndo() {
+        if (undoStack.length === 0) return
+        const snapshots = undoStack.pop()
+        const redoSnapshots = []
+        for (const snap of snapshots) {
+            const current = captureCanvasState(snap.panelIndex)
+            if (current) redoSnapshots.push(current)
+            const entry = panelCanvases.get(snap.panelIndex)
+            if (entry) {
+                entry.ctx.putImageData(snap.imageData, 0, 0)
+                entry.texture.needsUpdate = true
+            }
+        }
+        if (redoSnapshots.length > 0) redoStack.push(redoSnapshots)
+        refreshMainBall()
+    }
+
+    function performRedo() {
+        if (redoStack.length === 0) return
+        const snapshots = redoStack.pop()
+        const undoSnapshots = []
+        for (const snap of snapshots) {
+            const current = captureCanvasState(snap.panelIndex)
+            if (current) undoSnapshots.push(current)
+            const entry = panelCanvases.get(snap.panelIndex)
+            if (entry) {
+                entry.ctx.putImageData(snap.imageData, 0, 0)
+                entry.texture.needsUpdate = true
+            }
+        }
+        if (undoSnapshots.length > 0) undoStack.push(undoSnapshots)
+        refreshMainBall()
     }
     const panelUVBases = new Map()
     let painting = false
@@ -140,10 +199,18 @@ export function createCustomizerPreview({
     }
 
     function getOrCreateCanvas(panelIndex) {
-        const prev = panelCanvases.get(panelIndex)
-        if (prev) return prev
-
         const baseColor = getPanelBaseColor(panelIndex)
+        const prev = panelCanvases.get(panelIndex)
+        if (prev) {
+            if (!prev.painted && prev.baseColor !== baseColor) {
+                prev.ctx.fillStyle = baseColor
+                prev.ctx.fillRect(0, 0, PANEL_TEX_SIZE, PANEL_TEX_SIZE)
+                prev.baseColor = baseColor
+                prev.texture.needsUpdate = true
+            }
+            return prev
+        }
+
         const canvas2d = document.createElement('canvas')
         canvas2d.width = PANEL_TEX_SIZE
         canvas2d.height = PANEL_TEX_SIZE
@@ -155,7 +222,7 @@ export function createCustomizerPreview({
         texture.minFilter = THREE.LinearMipmapLinearFilter
         texture.magFilter = THREE.LinearFilter
         texture.anisotropy = 8
-        const entry = { canvas: canvas2d, ctx, texture, baseColor }
+        const entry = { canvas: canvas2d, ctx, texture, baseColor, painted: false }
         panelCanvases.set(panelIndex, entry)
         return entry
     }
@@ -306,6 +373,7 @@ export function createCustomizerPreview({
     function panelBrushStamp(panelIndex, uv, size, color) {
         const entry = panelCanvases.get(panelIndex)
         if (!entry) return
+        entry.painted = true
         const { ctx, texture } = entry
         const cx = uv.x * PANEL_TEX_SIZE
         const cy = (1 - uv.y) * PANEL_TEX_SIZE
@@ -451,6 +519,7 @@ export function createCustomizerPreview({
     function panelShapeStamp(panelIndex, uv, size, color, shapeName) {
         const entry = panelCanvases.get(panelIndex)
         if (!entry) return
+        entry.painted = true
         const { ctx, texture } = entry
         const cx = uv.x * PANEL_TEX_SIZE
         const cy = (1 - uv.y) * PANEL_TEX_SIZE
@@ -888,7 +957,18 @@ export function createCustomizerPreview({
             panelColorInput.value = panelHex
             panelColorBtn.style.backgroundColor = panelHex
 
-            if (state.custViewMode !== 'flat') {
+            if (state.custViewMode === 'flat') {
+                for (const child of previewBall.children) {
+                    if (child.userData.panelIndex === index && child.isMesh && child.geometry) {
+                        child.geometry.computeBoundingBox()
+                        const bb = child.geometry.boundingBox
+                        const cx = (bb.min.x + bb.max.x) / 2
+                        const cy = (bb.min.y + bb.max.y) / 2
+                        state.flatPanTarget = new THREE.Vector3(cx, cy, 0)
+                        break
+                    }
+                }
+            } else {
                 custControls.autoRotate = false
                 const panel = state.custExplodePanels[index]
                 if (panel) {
@@ -981,6 +1061,9 @@ export function createCustomizerPreview({
             const hit = raycastPanel(e)
             paintingLockedPanel = hit ? hit.panelIndex : -1
             if (hit) {
+                const affectedPanels = [hit.panelIndex]
+                if (mirror) affectedPanels.push(...studioUI.getSymmetryPeers(hit.panelIndex))
+                pushUndoSnapshot(affectedPanels)
                 panelBrushStroke(hit.panelIndex, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
                 if (mirror) {
                     for (const peer of studioUI.getSymmetryPeers(hit.panelIndex)) {
@@ -995,6 +1078,9 @@ export function createCustomizerPreview({
         if (tool === 'shape') {
             const hit = raycastPanel(e)
             if (hit) {
+                const affectedPanels = [hit.panelIndex]
+                if (mirror) affectedPanels.push(...studioUI.getSymmetryPeers(hit.panelIndex))
+                pushUndoSnapshot(affectedPanels)
                 const size = studioUI.getShapeSize()
                 const color = studioUI.getActiveColor()
                 const shape = studioUI.getActiveShape()
@@ -1123,7 +1209,7 @@ export function createCustomizerPreview({
         updateResetButtonVisibility()
 
         const entry = panelCanvases.get(state.selectedPanelIndex)
-        if (entry) {
+        if (entry && !entry.painted) {
             entry.ctx.fillStyle = color
             entry.ctx.fillRect(0, 0, PANEL_TEX_SIZE, PANEL_TEX_SIZE)
             entry.baseColor = color
@@ -1141,15 +1227,6 @@ export function createCustomizerPreview({
 
     panelColorInput.addEventListener('change', e => {
         if (state.selectedPanelIndex == null) return
-        const color = e.target.value
-
-        const entry = panelCanvases.get(state.selectedPanelIndex)
-        if (entry) {
-            entry.ctx.fillStyle = color
-            entry.ctx.fillRect(0, 0, PANEL_TEX_SIZE, PANEL_TEX_SIZE)
-            entry.baseColor = color
-            entry.texture.needsUpdate = true
-        }
 
         const pos = getBallGroup().position.clone()
         const rot = getBallGroup().rotation.clone()
@@ -1208,6 +1285,24 @@ export function createCustomizerPreview({
                 state.cameraAnimTarget = null
                 state.cameraAnimTargetSpherical = null
             }
+        }
+
+        if (state.flatPanTarget && state.custViewMode === 'flat') {
+            const target = state.flatPanTarget
+            custControls.target.x += (target.x - custControls.target.x) * 0.1
+            custControls.target.y += (target.y - custControls.target.y) * 0.1
+            custCamera.position.x += (target.x - custCamera.position.x) * 0.1
+            custCamera.position.y += (target.y - custCamera.position.y) * 0.1
+            const dx = custControls.target.x - target.x
+            const dy = custControls.target.y - target.y
+            if (Math.sqrt(dx * dx + dy * dy) < 0.05) {
+                custControls.target.x = target.x
+                custControls.target.y = target.y
+                custCamera.position.x = target.x
+                custCamera.position.y = target.y
+                state.flatPanTarget = null
+            }
+            custControls.update()
         }
     }
 
@@ -1409,6 +1504,8 @@ export function createCustomizerPreview({
 
         document.querySelectorAll('.view-btn').forEach(btn => {
             btn.addEventListener('click', () => {
+                state.flatPanTarget = null
+                custControls.target.set(0, 0, 0)
                 state.custViewMode = btn.dataset.view
                 document.querySelectorAll('.view-btn').forEach(b => {
                     b.classList.toggle('active', b.dataset.view === state.custViewMode)
@@ -1424,6 +1521,16 @@ export function createCustomizerPreview({
             else ballConfig.primaryColor = src.value
             const mirror = document.getElementById(mirrorId)
             if (mirror) mirror.value = src.value
+            for (const [idx, entry] of panelCanvases) {
+                if (entry.painted) continue
+                const newBase = getPanelBaseColor(idx)
+                if (entry.baseColor !== newBase) {
+                    entry.ctx.fillStyle = newBase
+                    entry.ctx.fillRect(0, 0, PANEL_TEX_SIZE, PANEL_TEX_SIZE)
+                    entry.baseColor = newBase
+                    entry.texture.needsUpdate = true
+                }
+            }
             updateBaseColorsInPlace()
         }
 
@@ -1432,10 +1539,7 @@ export function createCustomizerPreview({
         document.getElementById('primary-color-detail')?.addEventListener('input', (e) => syncBaseColor(e.target, 'primary-color'))
         document.getElementById('secondary-color-detail')?.addEventListener('input', (e) => syncBaseColor(e.target, 'secondary-color'))
 
-        const colorChangeHandler = () => {
-            invalidateCanvases('all')
-            updateBall()
-        }
+        const colorChangeHandler = () => updateBall()
         document.getElementById('primary-color')?.addEventListener('change', colorChangeHandler)
         document.getElementById('secondary-color')?.addEventListener('change', colorChangeHandler)
         document.getElementById('primary-color-detail')?.addEventListener('change', colorChangeHandler)
@@ -1460,6 +1564,26 @@ export function createCustomizerPreview({
 
     initBrushTextures()
 
+    // Undo/redo keyboard shortcuts
+    window.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+            e.preventDefault()
+            performUndo()
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) {
+            e.preventDefault()
+            performRedo()
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+            e.preventDefault()
+            performRedo()
+        }
+    })
+
+    // Wire undo/redo toolbar buttons
+    document.getElementById('tb-undo-btn')?.addEventListener('click', performUndo)
+    document.getElementById('tb-redo-btn')?.addEventListener('click', performRedo)
+
     return {
         studioUI,
         state,
@@ -1472,6 +1596,8 @@ export function createCustomizerPreview({
         wireCustomizerUi,
         animateCamera,
         debugAfterControlsUpdate,
-        applyCanvasTextures: applyCanvasTexturesToExternalBall
+        applyCanvasTextures: applyCanvasTexturesToExternalBall,
+        undo: performUndo,
+        redo: performRedo
     }
 }

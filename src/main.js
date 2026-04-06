@@ -55,8 +55,8 @@ const fillLight = new THREE.DirectionalLight(0xffffff, 1.0)
 fillLight.position.set(-5, 5, -5)
 scene.add(fillLight)
 
-const { gridHelper, fieldLines, backWall, leftWall, rightWall } = createPitchEnvironment(scene)
-const { goalGroup, goalWidth, goalHeight } = createGoal(scene)
+const { gridHelper, fieldLines, backWall, leftWall, rightWall, applyTheme: applyPitchTheme } = createPitchEnvironment(scene)
+const { goalGroup, goalWidth, goalHeight, applyTheme: applyGoalTheme } = createGoal(scene)
 
 const ballRadius = 0.22
 const penaltySpotZ = -11
@@ -133,7 +133,8 @@ const {
     pushTrailPoint,
     fadeTrail,
     renderBirdseye,
-    recordPhysicsSample
+    recordPhysicsSample,
+    drawFlightGraph
 } = createFlightAnalyticsPanels({
     scene,
     gridHelper,
@@ -381,6 +382,29 @@ function onPointerUp(e) {
 canvas.addEventListener('pointerdown', onPointerDown)
 canvas.addEventListener('pointermove', onPointerMove)
 canvas.addEventListener('pointerup', onPointerUp)
+
+// --- Theme toggle ---
+const themeToggleBtn = document.getElementById('theme-toggle-btn')
+function applyThemeToScenes() {
+    const isLight = document.documentElement.dataset.theme === 'light'
+    const sceneBg = isLight ? '#ffffff' : '#000000'
+    const previewBg = isLight ? '#ffffff' : '#0a0a0a'
+    scene.background.set(sceneBg)
+    scene.fog.color.set(sceneBg)
+    spinScene.background.set(previewBg)
+    if (customizer?.custScene) customizer.custScene.background.set(previewBg)
+    applyPitchTheme(isLight)
+    applyGoalTheme(isLight)
+    drawFlightGraph()
+    renderBirdseye()
+}
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+        const html = document.documentElement
+        html.dataset.theme = html.dataset.theme === 'light' ? '' : 'light'
+        applyThemeToScenes()
+    })
+}
 
 const tick = () => {
     const elapsedTime = performance.now() * 0.001

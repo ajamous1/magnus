@@ -86,5 +86,24 @@ export function createPitchEnvironment(scene) {
 
     scene.add(fieldLines)
 
-    return { gridHelper, fieldLines, backWall, leftWall, rightWall }
+    function applyTheme(isLight) {
+        const groundColor = isLight ? '#f5f5f5' : '#000000'
+        const gridColor1 = isLight ? '#ddd' : '#888888'
+        const gridColor2 = isLight ? '#eee' : '#222222'
+        pitchMaterial.color.set(groundColor)
+        gridHelper.material[0]?.color?.set(gridColor1)
+        gridHelper.material[1]?.color?.set(gridColor2)
+        wallCtx.fillStyle = isLight ? '#f8f8f8' : '#000000'
+        wallCtx.fillRect(0, 0, 512, 512)
+        wallCtx.strokeStyle = isLight ? '#ccc' : '#888888'
+        wallCtx.lineWidth = 0.5
+        for (let i = 0; i <= 512; i += 16) {
+            wallCtx.beginPath(); wallCtx.moveTo(i, 0); wallCtx.lineTo(i, 512); wallCtx.stroke()
+            wallCtx.beginPath(); wallCtx.moveTo(0, i); wallCtx.lineTo(512, i); wallCtx.stroke()
+        }
+        wallGridTexture.needsUpdate = true
+        lineMaterial.color.set(isLight ? '#555' : '#ffffff')
+    }
+
+    return { gridHelper, fieldLines, backWall, leftWall, rightWall, applyTheme }
 }

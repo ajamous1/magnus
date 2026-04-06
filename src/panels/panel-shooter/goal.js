@@ -58,5 +58,12 @@ export function createGoal(scene) {
     goalGroup.position.z = 0
     scene.add(goalGroup)
 
-    return { goalGroup, goalWidth, goalHeight }
+    function applyTheme(isLight) {
+        const postColor = isLight ? '#222' : '#ffffff'
+        postMaterial.color.set(postColor)
+        postMaterial.emissive.set(postColor)
+        netMaterial.color.set(isLight ? '#555' : '#888888')
+    }
+
+    return { goalGroup, goalWidth, goalHeight, applyTheme }
 }
