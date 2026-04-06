@@ -149,6 +149,7 @@ export function createCustomizerPreview({
     let paintingLockedPanel = -1
     const strokeBuffers = new Map()
     let strokePanelIndex = -1
+    let mirrorStrokeLog = []
 
     function generatePanelUVs(fillMesh, centroidDir, panelIndex) {
         const posAttr = fillMesh.geometry.attributes.position
@@ -403,7 +404,7 @@ export function createCustomizerPreview({
         const dx = (p3.x - p2.x) * PANEL_TEX_SIZE
         const dy = (p3.y - p2.y) * PANEL_TEX_SIZE
         const segDist = Math.sqrt(dx * dx + dy * dy)
-        const steps = Math.max(1, Math.ceil(segDist / (size * 0.8)))
+        const steps = Math.min(8, Math.max(1, Math.ceil(segDist / (size * 0.8))))
         for (let s = 1; s <= steps; s++) {
             const t = s / steps
             const t2 = t * t, t3 = t2 * t
@@ -564,10 +565,19 @@ export function createCustomizerPreview({
         }
     }
 
+    function cloneCanvasTexture(entry) {
+        const copy = document.createElement('canvas')
+        copy.width = entry.canvas.width
+        copy.height = entry.canvas.height
+        copy.getContext('2d').drawImage(entry.canvas, 0, 0)
+        const tex = new THREE.CanvasTexture(copy)
+        tex.colorSpace = THREE.SRGBColorSpace
+        return tex
+    }
+
     function applyCanvasTexturesToExternalBall(group) {
         if (!state.custExplodePanels || state.custExplodePanels.length === 0) return
         for (const child of group.children) {
-            // Panel groups (fill mesh inside)
             if (child.isGroup && child.userData.panelIndex != null) {
                 const panelIdx = child.userData.panelIndex
                 const fillMesh = child.children[0]
@@ -577,17 +587,14 @@ export function createCustomizerPreview({
                 const panel = state.custExplodePanels[panelIdx]
                 if (!panel?.centroidDir) continue
                 generatePanelUVs(fillMesh, panel.centroidDir, panelIdx)
+                const tex = cloneCanvasTexture(entry)
                 fillMesh.material.dispose()
                 fillMesh.material = new THREE.MeshLambertMaterial({
-                    map: entry.texture,
-                    emissiveMap: entry.texture,
-                    color: 0xffffff,
-                    emissive: 0xffffff,
-                    emissiveIntensity: 0.15,
-                    side: THREE.DoubleSide
+                    map: tex, emissiveMap: tex,
+                    color: 0xffffff, emissive: 0xffffff,
+                    emissiveIntensity: 0.15, side: THREE.DoubleSide
                 })
             }
-            // Stitching overlay meshes (e.g. classic pentagon caps)
             if (child.isMesh && child.userData.stitchPanelIndex != null) {
                 const panelIdx = child.userData.stitchPanelIndex
                 const panel = state.custExplodePanels[panelIdx]
@@ -595,14 +602,12 @@ export function createCustomizerPreview({
                 const entry = panelCanvases.get(panelIdx)
                 if (!entry) continue
                 generatePanelUVs(child, panel.centroidDir, panelIdx)
+                const tex = cloneCanvasTexture(entry)
                 child.material.dispose()
                 child.material = new THREE.MeshLambertMaterial({
-                    map: entry.texture,
-                    emissiveMap: entry.texture,
-                    color: 0xffffff,
-                    emissive: 0xffffff,
-                    emissiveIntensity: 0.15,
-                    side: THREE.DoubleSide
+                    map: tex, emissiveMap: tex,
+                    color: 0xffffff, emissive: 0xffffff,
+                    emissiveIntensity: 0.15, side: THREE.DoubleSide
                 })
             }
         }
@@ -623,7 +628,15 @@ export function createCustomizerPreview({
     }
 
     function syncExternalBalls() {
-        applyCanvasTexturesToExternalBall(getBallGroup())
+        const pos = getBallGroup().position.clone()
+        const rot = getBallGroup().rotation.clone()
+        mainScene.remove(getBallGroup())
+        const next = buildMainBall()
+        applyCanvasTexturesToExternalBall(next)
+        next.position.copy(pos)
+        next.rotation.copy(rot)
+        mainScene.add(next)
+        setBallGroup(next)
         if (onBallChanged) onBallChanged()
     }
 
@@ -1069,11 +1082,11 @@ export function createCustomizerPreview({
                 const affectedPanels = [hit.panelIndex]
                 if (mirror) affectedPanels.push(...studioUI.getSymmetryPeers(hit.panelIndex))
                 pushUndoSnapshot(affectedPanels)
-                panelBrushStroke(hit.panelIndex, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
+                const bSize = studioUI.getBrushSize()
+                const bColor = studioUI.getActiveColor()
+                panelBrushStroke(hit.panelIndex, hit.uv, bSize, bColor)
                 if (mirror) {
-                    for (const peer of studioUI.getSymmetryPeers(hit.panelIndex)) {
-                        panelBrushStroke(peer, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
-                    }
+                    mirrorStrokeLog = [{ uv: hit.uv, size: bSize, color: bColor }]
                 }
             }
             e.stopImmediatePropagation()
@@ -1107,12 +1120,23 @@ export function createCustomizerPreview({
     custCanvas.addEventListener('pointerup', e => {
         if (painting) {
             painting = false
+            const lockedPanel = paintingLockedPanel
             paintingLockedPanel = -1
             strokeBuffers.clear()
             custControls.enabled = true
             if (state.custViewMode === 'flat') custControls.enablePan = true
             custCanvas.style.cursor = studioUI?.getActiveTool() === 'brush' ? 'crosshair' : 'grab'
-            
+            if (studioUI?.isMirrorMode() && mirrorStrokeLog.length > 0 && lockedPanel >= 0) {
+                const peers = studioUI.getSymmetryPeers(lockedPanel)
+                for (const peer of peers) {
+                    strokeBuffers.delete(peer)
+                    for (const pt of mirrorStrokeLog) {
+                        panelBrushStroke(peer, pt.uv, pt.size, pt.color)
+                    }
+                }
+                strokeBuffers.clear()
+                mirrorStrokeLog = []
+            }
             return
         }
         if (!pointerDownPos) return
@@ -1159,9 +1183,7 @@ export function createCustomizerPreview({
                 const color = studioUI.getActiveColor()
                 panelBrushStroke(hit.panelIndex, hit.uv, size, color)
                 if (studioUI?.isMirrorMode()) {
-                    for (const peer of studioUI.getSymmetryPeers(hit.panelIndex)) {
-                        panelBrushStroke(peer, hit.uv, size, color)
-                    }
+                    mirrorStrokeLog.push({ uv: hit.uv, size, color })
                 }
             }
             return
@@ -1233,28 +1255,8 @@ export function createCustomizerPreview({
 
     panelColorInput.addEventListener('change', e => {
         if (state.selectedPanelIndex == null) return
-
-        const pos = getBallGroup().position.clone()
-        const rot = getBallGroup().rotation.clone()
-        mainScene.remove(getBallGroup())
-        const next = buildMainBall()
-        next.position.copy(pos)
-        next.rotation.copy(rot)
-        mainScene.add(next)
-        setBallGroup(next)
-        if (onBallChanged) onBallChanged()
-
-        if (state.custViewMode !== 'flat') {
-            custScene.remove(previewBall)
-            const result = buildExplodedBall(ballConfig, previewRadius)
-            previewBall = result.group
-            state.custExplodePanels = result.panels
-            applyExplodeFactor(state.custExplodePanels, state.custExplodeFactor)
-            if (state.custExplodeFactor === 0) addStitching(previewBall, ballConfig, previewRadius)
-            custScene.add(previewBall)
-            initBrushTextures()
-            if (state.selectedPanelIndex != null) setSelectionHighlight(state.selectedPanelIndex, true)
-        }
+        updateBall()
+        syncExternalBalls()
     })
 
     // --- Reset button ---
@@ -1266,6 +1268,7 @@ export function createCustomizerPreview({
         selectPanel(null)
         updateResetButtonVisibility()
         updateBall()
+        syncExternalBalls()
     })
 
     // --- Camera animation (lerp toward selected panel) ---
@@ -1394,8 +1397,6 @@ export function createCustomizerPreview({
     function updateBall() {
         if (state.custViewMode === 'ball' || state.custViewMode !== 'flat') rememberBallCameraPose()
 
-        syncExternalBalls()
-
         custScene.remove(previewBall)
         if (state.custViewMode === 'flat') {
             previewBall = buildFlatLayout(ballConfig)
@@ -1495,6 +1496,7 @@ export function createCustomizerPreview({
                 })
                 selectPanel(null)
                 updateBall()
+                syncExternalBalls()
                 if (studioUI) studioUI.renderPatterns()
             })
         })
@@ -1555,7 +1557,10 @@ export function createCustomizerPreview({
         document.getElementById('primary-color-detail')?.addEventListener('input', (e) => syncBaseColor(e.target, 'primary-color'))
         document.getElementById('secondary-color-detail')?.addEventListener('input', (e) => syncBaseColor(e.target, 'secondary-color'))
 
-        const colorChangeHandler = () => updateBall()
+        const colorChangeHandler = () => {
+            updateBall()
+            syncExternalBalls()
+        }
         document.getElementById('primary-color')?.addEventListener('change', colorChangeHandler)
         document.getElementById('secondary-color')?.addEventListener('change', colorChangeHandler)
         document.getElementById('primary-color-detail')?.addEventListener('change', colorChangeHandler)
@@ -1581,7 +1586,7 @@ export function createCustomizerPreview({
         if (state.custViewMode === 'ball') rememberBallCameraPose()
     })
 
-    const studioUI = createStudioUI({ ballConfig, updateBall, selectPanel, invalidateCanvases })
+    const studioUI = createStudioUI({ ballConfig, updateBall, selectPanel, invalidateCanvases, syncExternalBalls })
 
     initBrushTextures()
 

@@ -149,7 +149,7 @@ export const SYMMETRY_GROUPS = {
 /**
  * Studio toolbar controller for the fullscreen customizer.
  */
-export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidateCanvases }) {
+export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidateCanvases, syncExternalBalls }) {
     let activeTool = 'select'
     let mirrorMode = false
     let activeColor = '#cc2233'
@@ -184,6 +184,7 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidate
             if (invalidateCanvases) invalidateCanvases(index)
         }
         updateBall()
+        if (syncExternalBalls) syncExternalBalls()
     }
 
     function handlePanelClick(index) {
@@ -281,6 +282,7 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidate
         })
         selectPanel(null)
         updateBall()
+        if (syncExternalBalls) syncExternalBalls()
         closeAllDropdowns()
     }
 
@@ -364,6 +366,7 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidate
             document.querySelectorAll('.tb-pattern').forEach(p => p.classList.remove('active'))
             selectPanel(null)
             updateBall()
+            if (syncExternalBalls) syncExternalBalls()
         })
     }
 

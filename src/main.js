@@ -463,10 +463,10 @@ const tick = () => {
 
     if (kickPhysics.isKicking) {
         pushTrailPoint()
-        renderBirdseye()
-    } else if (fadeTrail()) {
-        renderBirdseye()
+    } else {
+        fadeTrail()
     }
+    renderBirdseye()
 
     window.requestAnimationFrame(tick)
 }
