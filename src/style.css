@@ -522,13 +522,13 @@ body {
     color: var(--text-accent-hover);
 }
 .tb-shape-opt.active {
-    background: #1a3a5a;
+    background: var(--bg-active);
     color: var(--text-accent);
     border-color: #335566;
 }
 .tb-btn:hover { background: var(--bg-hover); color: var(--text-accent-hover); }
 .tb-btn.active {
-    background: #1a3a5a;
+    background: var(--bg-active);
     color: var(--text-accent);
 }
 
@@ -667,7 +667,7 @@ body {
     transition: all 0.12s;
 }
 .tb-design-btn:hover { color: #99aabb; background: var(--bg-hover); }
-.tb-design-btn.active { background: #2a4060; color: var(--text-accent); }
+.tb-design-btn.active { background: var(--bg-active); color: var(--text-accent); }
 
 .tb-view-group {
     display: flex;
@@ -690,7 +690,7 @@ body {
     transition: all 0.12s;
 }
 .tb-view-btn:hover { color: #8899aa; background: var(--bg-hover); }
-.tb-view-btn.active { background: #2a4060; color: #b0d0ff; }
+.tb-view-btn.active { background: var(--bg-active); color: var(--text-accent); }
 
 /* Explode slider in toolbar */
 .tb-explode-slider {
@@ -1162,7 +1162,8 @@ body {
 }
 
 #panel-customizer.fullscreen .panel-reset-btn,
-#panel-customizer.zoomed-out .panel-reset-btn {
+#panel-customizer.zoomed-out .panel-reset-btn,
+#panel-customizer.edit-mode-active .panel-reset-btn {
     display: none !important;
 }
 

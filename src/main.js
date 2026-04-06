@@ -378,6 +378,7 @@ function onPointerUp(e) {
     const heightFactor = Math.max(0, Math.min(1, (flickAngle / (Math.PI / 2)) * 1.3 - 0.2))
     const aimY = heightFactor * goalHeight * 0.95
 
+    customizer.syncExternalBalls()
     kick(normalizedPower, aimX, curveAmount, aimY)
 }
 
@@ -410,6 +411,9 @@ if (themeToggleBtn) {
     })
 }
 
+const _spinAxis = new THREE.Vector3()
+const _upVec = new THREE.Vector3(0, 1, 0)
+
 const tick = () => {
     const elapsedTime = performance.now() * 0.001
     if (controls.enabled) {
@@ -440,18 +444,16 @@ const tick = () => {
         const az = debugParams.spinAxisZ
         const len = Math.sqrt(ax * ax + ay * ay + az * az)
         if (len > 0.001) {
-            const axis = new THREE.Vector3(ax / len, ay / len, az / len)
-            spinBall.rotateOnWorldAxis(axis, debugParams.spinSpeed * 0.01)
+            _spinAxis.set(ax / len, ay / len, az / len)
+            spinBall.rotateOnWorldAxis(_spinAxis, debugParams.spinSpeed * 0.01)
 
             amGroup.visible = debugParams.showAngularMomentum
             if (amGroup.visible) {
-                const up = new THREE.Vector3(0, 1, 0)
-                amGroup.quaternion.setFromUnitVectors(up, axis)
+                amGroup.quaternion.setFromUnitVectors(_upVec, _spinAxis)
             }
         } else {
             amGroup.visible = false
         }
-
     }
     spinRenderer.render(spinScene, spinCamera)
 
@@ -459,15 +461,12 @@ const tick = () => {
     custControls.update()
     custRenderer.render(custScene, custCamera)
 
-
     if (kickPhysics.isKicking) {
         pushTrailPoint()
-    } else {
-        fadeTrail()
+        renderBirdseye()
+    } else if (fadeTrail()) {
+        renderBirdseye()
     }
-
-    renderBirdseye()
-    updateForceVectors()
 
     window.requestAnimationFrame(tick)
 }

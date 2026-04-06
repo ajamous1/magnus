@@ -125,7 +125,7 @@ export function createCustomizerPreview({
             }
         }
         if (redoSnapshots.length > 0) redoStack.push(redoSnapshots)
-        refreshMainBall()
+        
     }
 
     function performRedo() {
@@ -142,7 +142,7 @@ export function createCustomizerPreview({
             }
         }
         if (undoSnapshots.length > 0) undoStack.push(undoSnapshots)
-        refreshMainBall()
+        
     }
     const panelUVBases = new Map()
     let painting = false
@@ -214,7 +214,7 @@ export function createCustomizerPreview({
         const canvas2d = document.createElement('canvas')
         canvas2d.width = PANEL_TEX_SIZE
         canvas2d.height = PANEL_TEX_SIZE
-        const ctx = canvas2d.getContext('2d')
+        const ctx = canvas2d.getContext('2d', { willReadFrequently: true })
         ctx.fillStyle = baseColor
         ctx.fillRect(0, 0, PANEL_TEX_SIZE, PANEL_TEX_SIZE)
         const texture = new THREE.CanvasTexture(canvas2d)
@@ -620,6 +620,11 @@ export function createCustomizerPreview({
         setBallGroup(next)
         if (onBallChanged) onBallChanged()
         updateResetButtonVisibility()
+    }
+
+    function syncExternalBalls() {
+        applyCanvasTexturesToExternalBall(getBallGroup())
+        if (onBallChanged) onBallChanged()
     }
 
     // =========================================================================
@@ -1090,7 +1095,6 @@ export function createCustomizerPreview({
                         panelShapeStamp(peer, hit.uv, size, color, shape)
                     }
                 }
-                refreshMainBall()
             }
             e.stopImmediatePropagation()
             return
@@ -1108,7 +1112,7 @@ export function createCustomizerPreview({
             custControls.enabled = true
             if (state.custViewMode === 'flat') custControls.enablePan = true
             custCanvas.style.cursor = studioUI?.getActiveTool() === 'brush' ? 'crosshair' : 'grab'
-            refreshMainBall()
+            
             return
         }
         if (!pointerDownPos) return
@@ -1138,23 +1142,25 @@ export function createCustomizerPreview({
 
     const isMobile = window.innerWidth <= 768
     let lastPaintTime = 0
-    const paintThrottleMs = isMobile ? 16 : 0
+    const basePaintThrottleMs = isMobile ? 16 : 0
 
     custCanvas.addEventListener('pointermove', e => {
         if (painting) {
             e.preventDefault()
             custControls.enabled = false
-            if (paintThrottleMs > 0) {
+            if (basePaintThrottleMs > 0) {
                 const now = performance.now()
-                if (now - lastPaintTime < paintThrottleMs) return
+                if (now - lastPaintTime < basePaintThrottleMs) return
                 lastPaintTime = now
             }
             const hit = raycastPanel(e)
             if (hit && hit.panelIndex === paintingLockedPanel) {
-                panelBrushStroke(hit.panelIndex, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
+                const size = studioUI.getBrushSize()
+                const color = studioUI.getActiveColor()
+                panelBrushStroke(hit.panelIndex, hit.uv, size, color)
                 if (studioUI?.isMirrorMode()) {
                     for (const peer of studioUI.getSymmetryPeers(hit.panelIndex)) {
-                        panelBrushStroke(peer, hit.uv, studioUI.getBrushSize(), studioUI.getActiveColor())
+                        panelBrushStroke(peer, hit.uv, size, color)
                     }
                 }
             }
@@ -1388,16 +1394,7 @@ export function createCustomizerPreview({
     function updateBall() {
         if (state.custViewMode === 'ball' || state.custViewMode !== 'flat') rememberBallCameraPose()
 
-        const pos = getBallGroup().position.clone()
-        const rot = getBallGroup().rotation.clone()
-        mainScene.remove(getBallGroup())
-        const next = buildMainBall()
-        applyCanvasTexturesToExternalBall(next)
-        next.position.copy(pos)
-        next.rotation.copy(rot)
-        mainScene.add(next)
-        setBallGroup(next)
-        if (onBallChanged) onBallChanged()
+        syncExternalBalls()
 
         custScene.remove(previewBall)
         if (state.custViewMode === 'flat') {
@@ -1531,6 +1528,25 @@ export function createCustomizerPreview({
                     entry.texture.needsUpdate = true
                 }
             }
+            if (isSec && previewBall) {
+                const secColor = new THREE.Color(src.value)
+                for (const child of previewBall.children) {
+                    if (child.userData.panelIndex != null || child.userData.stitchPanelIndex != null) continue
+                    if (child.isMesh && child.material) {
+                        child.material.color.copy(secColor)
+                        if (child.material.emissive) child.material.emissive.copy(secColor)
+                    }
+                    if (child.isLine && child.material) {
+                        child.material.color.copy(secColor)
+                    }
+                    if (child.isGroup) {
+                        const border = child.children[1]
+                        if (border?.isLine && border.material) {
+                            border.material.color.copy(secColor)
+                        }
+                    }
+                }
+            }
             updateBaseColorsInPlace()
         }
 
@@ -1547,10 +1563,15 @@ export function createCustomizerPreview({
     }
 
     if (panelRoot) {
+        let wasFullscreen = false
         const updateZoomState = () => {
             const detailed = panelRoot.classList.contains('fullscreen')
+            const editMode = panelRoot.classList.contains('edit-mode-active')
+            const isExpanded = detailed || editMode
             panelRoot.classList.toggle('zoomed-out', detailed)
             if (zoomStateLabel) zoomStateLabel.textContent = detailed ? 'Detailed View' : 'Focused View'
+            if (wasFullscreen && !isExpanded) syncExternalBalls()
+            wasFullscreen = isExpanded
         }
         new MutationObserver(updateZoomState).observe(panelRoot, { attributes: true, attributeFilter: ['class'] })
         updateZoomState()
@@ -1563,6 +1584,9 @@ export function createCustomizerPreview({
     const studioUI = createStudioUI({ ballConfig, updateBall, selectPanel, invalidateCanvases })
 
     initBrushTextures()
+
+    // Apply shared textures to external balls after customizer is fully constructed
+    setTimeout(() => syncExternalBalls(), 0)
 
     // Undo/redo keyboard shortcuts
     window.addEventListener('keydown', e => {
@@ -1597,6 +1621,7 @@ export function createCustomizerPreview({
         animateCamera,
         debugAfterControlsUpdate,
         applyCanvasTextures: applyCanvasTexturesToExternalBall,
+        syncExternalBalls,
         undo: performUndo,
         redo: performRedo
     }

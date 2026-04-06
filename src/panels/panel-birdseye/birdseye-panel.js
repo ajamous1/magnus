@@ -74,12 +74,14 @@ export function createBirdseyePanel({
     }
 
     function fadeTrail() {
-        if (trailPoints.length === 0) return
+        if (trailPoints.length === 0) return false
         trailFade = Math.max(0, trailFade - 0.018)
         trailMaterial.opacity = 0.95 * trailFade
         if (trailFade <= 0.01) {
             clearTrail()
+            return false
         }
+        return true
     }
 
     function renderBirdseye() {
