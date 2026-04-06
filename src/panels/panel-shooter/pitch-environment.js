@@ -87,7 +87,7 @@ export function createPitchEnvironment(scene) {
     scene.add(fieldLines)
 
     function applyTheme(isLight) {
-        const groundColor = isLight ? '#f5f5f5' : '#000000'
+        const groundColor = isLight ? '#ffffff' : '#000000'
         const gridColor1 = isLight ? '#ddd' : '#888888'
         const gridColor2 = isLight ? '#eee' : '#222222'
         pitchMaterial.color.set(groundColor)
