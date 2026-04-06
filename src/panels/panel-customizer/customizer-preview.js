@@ -1404,6 +1404,7 @@ export function createCustomizerPreview({
     // --- Main updateBall ---
 
     function updateBall() {
+        externalBallsDirty = true
         if (state.custViewMode === 'ball' || state.custViewMode !== 'flat') rememberBallCameraPose()
 
         custScene.remove(previewBall)
