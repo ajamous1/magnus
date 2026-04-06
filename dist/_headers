@@ -1,3 +1,6 @@
 /*
   Access-Control-Allow-Origin: https://ahmadjamous.net
   Access-Control-Allow-Private-Network: true
+
+/magnus.ico
+  Cache-Control: no-cache
