@@ -199,14 +199,14 @@ spinFill.position.set(-3, 2, -3)
 spinScene.add(spinFill)
 
 const spinRadius = 0.4
-let spinBall = buildMainBallForPreview(spinRadius)
+let spinBall = buildMainBallForPreview(spinRadius).group
 spinScene.add(spinBall)
 
 function buildMainBallForPreview(r) {
     const result = buildExplodedBall(ballConfig, r)
     applyExplodeFactor(result.panels, 0)
     addStitching(result.group, ballConfig, r)
-    return result.group
+    return { group: result.group, panels: result.panels }
 }
 
 // Angular momentum vector (arrow along spin axis)
@@ -225,10 +225,11 @@ spinScene.add(amGroup)
 function rebuildSpinBall() {
     const rot = spinBall.rotation.clone()
     spinScene.remove(spinBall)
-    spinBall = buildMainBallForPreview(spinRadius)
+    const built = buildMainBallForPreview(spinRadius)
+    spinBall = built.group
     spinBall.rotation.copy(rot)
     spinScene.add(spinBall)
-    if (customizer) customizer.applyCanvasTextures(spinBall)
+    if (customizer) customizer.applyCanvasTextures(spinBall, built.panels)
 }
 
 const spinCamera = new THREE.PerspectiveCamera(
@@ -378,7 +379,7 @@ function onPointerUp(e) {
     const heightFactor = Math.max(0, Math.min(1, (flickAngle / (Math.PI / 2)) * 1.3 - 0.2))
     const aimY = heightFactor * goalHeight * 0.95
 
-    customizer.syncExternalBalls()
+    customizer.syncExternalBalls({ force: true })
     kick(normalizedPower, aimX, curveAmount, aimY)
 }
 

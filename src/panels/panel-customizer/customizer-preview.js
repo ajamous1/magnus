@@ -24,6 +24,12 @@ export function createCustomizerPreview({
     cancelKick
 }) {
     const panelRoot = document.getElementById('panel-customizer')
+
+    function isDesignerExpanded() {
+        if (!panelRoot) return false
+        return panelRoot.classList.contains('fullscreen') || panelRoot.classList.contains('edit-mode-active')
+    }
+
     const zoomStateLabel = document.getElementById('zoom-state-label')
     const panelColorBtn = document.getElementById('panel-color-btn')
     const panelColorInput = document.getElementById('panel-color-input')
@@ -59,6 +65,9 @@ export function createCustomizerPreview({
     let previewBall = null
     const raycaster = new THREE.Raycaster()
     const mouse = new THREE.Vector2()
+
+    /** When true, ignore primary/secondary `change` handlers (avoids sync while pattern apply is mid-flight). */
+    let suppressColorDerivedSync = false
 
     // Build initial preview ball using panel-based mesh
     function buildPanelBall() {
@@ -125,7 +134,8 @@ export function createCustomizerPreview({
             }
         }
         if (redoSnapshots.length > 0) redoStack.push(redoSnapshots)
-        
+        externalBallsDirty = true
+        if (!isDesignerExpanded()) syncExternalBalls()
     }
 
     function performRedo() {
@@ -142,7 +152,8 @@ export function createCustomizerPreview({
             }
         }
         if (undoSnapshots.length > 0) undoStack.push(undoSnapshots)
-        
+        externalBallsDirty = true
+        if (!isDesignerExpanded()) syncExternalBalls()
     }
     const panelUVBases = new Map()
     let painting = false
@@ -160,7 +171,7 @@ export function createCustomizerPreview({
         const uy = new THREE.Vector3().crossVectors(centroidDir, ux).normalize()
         let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity
         for (let i = 0; i < posAttr.count; i++) {
-            const dir = new THREE.Vector3(
+        const dir = new THREE.Vector3(
                 posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)
             ).normalize()
             const u = dir.dot(ux), v = dir.dot(uy)
@@ -522,6 +533,7 @@ export function createCustomizerPreview({
         const entry = panelCanvases.get(panelIndex)
         if (!entry) return
         entry.painted = true
+        externalBallsDirty = true
         const { ctx, texture } = entry
         const cx = uv.x * PANEL_TEX_SIZE
         const cy = (1 - uv.y) * PANEL_TEX_SIZE
@@ -576,8 +588,8 @@ export function createCustomizerPreview({
         return tex
     }
 
-    function applyCanvasTexturesToExternalBall(group) {
-        if (!state.custExplodePanels || state.custExplodePanels.length === 0) return
+    function applyCanvasTexturesToExternalBall(group, panelsMeta = state.custExplodePanels) {
+        if (!panelsMeta || panelsMeta.length === 0) return
         for (const child of group.children) {
             if (child.isGroup && child.userData.panelIndex != null) {
                 const panelIdx = child.userData.panelIndex
@@ -585,7 +597,7 @@ export function createCustomizerPreview({
                 if (!fillMesh || !fillMesh.isMesh) continue
                 const entry = panelCanvases.get(panelIdx)
                 if (!entry) continue
-                const panel = state.custExplodePanels[panelIdx]
+                const panel = panelsMeta[panelIdx]
                 if (!panel?.centroidDir) continue
                 generatePanelUVs(fillMesh, panel.centroidDir, panelIdx)
                 const tex = cloneCanvasTexture(entry)
@@ -598,7 +610,7 @@ export function createCustomizerPreview({
             }
             if (child.isMesh && child.userData.stitchPanelIndex != null) {
                 const panelIdx = child.userData.stitchPanelIndex
-                const panel = state.custExplodePanels[panelIdx]
+                const panel = panelsMeta[panelIdx]
                 if (!panel?.centroidDir) continue
                 const entry = panelCanvases.get(panelIdx)
                 if (!entry) continue
@@ -630,14 +642,20 @@ export function createCustomizerPreview({
 
     let externalBallsDirty = true
 
-    function syncExternalBalls() {
+    function syncExternalBalls(options = {}) {
+        const force = options && options.force === true
+        if (!force && isDesignerExpanded()) {
+            externalBallsDirty = true
+            return
+        }
         if (!externalBallsDirty) return
         externalBallsDirty = false
         const pos = getBallGroup().position.clone()
         const rot = getBallGroup().rotation.clone()
         mainScene.remove(getBallGroup())
         const next = buildMainBall()
-        applyCanvasTexturesToExternalBall(next)
+        const externalMeta = buildExplodedBall(ballConfig, ballRadius)
+        applyCanvasTexturesToExternalBall(next, externalMeta.panels)
         next.position.copy(pos)
         next.rotation.copy(rot)
         mainScene.add(next)
@@ -1070,8 +1088,8 @@ export function createCustomizerPreview({
         const tool = studioUI?.getActiveTool()
         if (tool === 'brush' || tool === 'shape') {
             if (state.custViewMode === 'flat') {
-                custControls.enablePan = false
-                custControls.enableRotate = false
+            custControls.enablePan = false
+            custControls.enableRotate = false
             }
         }
     }, true)
@@ -1117,6 +1135,7 @@ export function createCustomizerPreview({
                         panelShapeStamp(peer, hit.uv, size, color, shape)
                     }
                 }
+                if (!isDesignerExpanded()) syncExternalBalls()
             }
             e.stopImmediatePropagation()
             return
@@ -1146,6 +1165,7 @@ export function createCustomizerPreview({
                 strokeBuffers.clear()
                 mirrorStrokeLog = []
             }
+            if (!isDesignerExpanded()) syncExternalBalls()
             return
         }
         if (!pointerDownPos) return
@@ -1525,6 +1545,7 @@ export function createCustomizerPreview({
         })
 
         function syncBaseColor(src, mirrorId) {
+            if (suppressColorDerivedSync) return
             const isSec = src.id.includes('secondary')
             if (isSec) ballConfig.secondaryColor = src.value
             else ballConfig.primaryColor = src.value
@@ -1568,6 +1589,7 @@ export function createCustomizerPreview({
         document.getElementById('secondary-color-detail')?.addEventListener('input', (e) => syncBaseColor(e.target, 'secondary-color'))
 
         const colorChangeHandler = () => {
+            if (suppressColorDerivedSync) return
             updateBall()
             syncExternalBalls()
         }
@@ -1596,7 +1618,23 @@ export function createCustomizerPreview({
         if (state.custViewMode === 'ball') rememberBallCameraPose()
     })
 
-    const studioUI = createStudioUI({ ballConfig, updateBall, selectPanel, invalidateCanvases, syncExternalBalls })
+    function runWithColorSyncSuppressed(fn) {
+        suppressColorDerivedSync = true
+        try {
+            fn()
+        } finally {
+            suppressColorDerivedSync = false
+        }
+    }
+
+    const studioUI = createStudioUI({
+        ballConfig,
+        updateBall,
+        selectPanel,
+        invalidateCanvases,
+        syncExternalBalls,
+        runWithColorSyncSuppressed
+    })
 
     initBrushTextures()
 

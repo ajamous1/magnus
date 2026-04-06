@@ -149,7 +149,14 @@ export const SYMMETRY_GROUPS = {
 /**
  * Studio toolbar controller for the fullscreen customizer.
  */
-export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidateCanvases, syncExternalBalls }) {
+export function createStudioUI({
+    ballConfig,
+    updateBall,
+    selectPanel,
+    invalidateCanvases,
+    syncExternalBalls,
+    runWithColorSyncSuppressed
+}) {
     let activeTool = 'select'
     let mirrorMode = false
     let activeColor = '#cc2233'
@@ -262,27 +269,33 @@ export function createStudioUI({ ballConfig, updateBall, selectPanel, invalidate
         const pat = patterns[index]
         if (!pat) return
 
-        if (invalidateCanvases) invalidateCanvases('all')
-        clearPanelColors(ballConfig.design)
-        if (pat.primary) {
-            ballConfig.primaryColor = pat.primary
-            document.querySelectorAll('#primary-color, #primary-color-detail').forEach(el => el.value = pat.primary)
-        }
-        if (pat.secondary) {
-            ballConfig.secondaryColor = pat.secondary
-            document.querySelectorAll('#secondary-color, #secondary-color-detail').forEach(el => el.value = pat.secondary)
-        }
-        for (const [idx, color] of Object.entries(pat.colors)) {
-            setPanelColor(ballConfig.design, parseInt(idx), color)
+        const run = () => {
+            if (invalidateCanvases) invalidateCanvases('all')
+            clearPanelColors(ballConfig.design)
+            if (pat.primary) ballConfig.primaryColor = pat.primary
+            if (pat.secondary) ballConfig.secondaryColor = pat.secondary
+            for (const [idx, color] of Object.entries(pat.colors)) {
+                setPanelColor(ballConfig.design, parseInt(idx), color)
+            }
+
+            activePatternIdx = index
+            document.querySelectorAll('.tb-pattern').forEach(p => {
+                p.classList.toggle('active', parseInt(p.dataset.patternIndex) === index)
+            })
+            selectPanel(null)
+            updateBall()
+            if (syncExternalBalls) syncExternalBalls()
+
+            if (pat.primary) {
+                document.querySelectorAll('#primary-color, #primary-color-detail').forEach(el => { el.value = pat.primary })
+            }
+            if (pat.secondary) {
+                document.querySelectorAll('#secondary-color, #secondary-color-detail').forEach(el => { el.value = pat.secondary })
+            }
         }
 
-        activePatternIdx = index
-        document.querySelectorAll('.tb-pattern').forEach(p => {
-            p.classList.toggle('active', parseInt(p.dataset.patternIndex) === index)
-        })
-        selectPanel(null)
-        updateBall()
-        if (syncExternalBalls) syncExternalBalls()
+        if (runWithColorSyncSuppressed) runWithColorSyncSuppressed(run)
+        else run()
         closeAllDropdowns()
     }
 
