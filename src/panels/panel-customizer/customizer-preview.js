@@ -77,7 +77,7 @@ export function createCustomizerPreview({
     // Unified per-panel canvas brush system
     // =========================================================================
 
-    const PANEL_TEX_SIZE = window.innerWidth <= 768 ? 512 : 1024
+    const PANEL_TEX_SIZE = window.innerWidth <= 480 ? 256 : window.innerWidth <= 768 ? 512 : 1024
     const designCanvasStore = new Map()
     let panelCanvases = new Map()
     designCanvasStore.set(ballConfig.design, panelCanvases)
@@ -375,6 +375,7 @@ export function createCustomizerPreview({
         const entry = panelCanvases.get(panelIndex)
         if (!entry) return
         entry.painted = true
+        externalBallsDirty = true
         const { ctx, texture } = entry
         const cx = uv.x * PANEL_TEX_SIZE
         const cy = (1 - uv.y) * PANEL_TEX_SIZE
@@ -627,7 +628,11 @@ export function createCustomizerPreview({
         updateResetButtonVisibility()
     }
 
+    let externalBallsDirty = true
+
     function syncExternalBalls() {
+        if (!externalBallsDirty) return
+        externalBallsDirty = false
         const pos = getBallGroup().position.clone()
         const rot = getBallGroup().rotation.clone()
         mainScene.remove(getBallGroup())
@@ -638,6 +643,10 @@ export function createCustomizerPreview({
         mainScene.add(next)
         setBallGroup(next)
         if (onBallChanged) onBallChanged()
+    }
+
+    function markExternalDirty() {
+        externalBallsDirty = true
     }
 
     // =========================================================================
@@ -1166,7 +1175,7 @@ export function createCustomizerPreview({
 
     const isMobile = window.innerWidth <= 768
     let lastPaintTime = 0
-    const basePaintThrottleMs = isMobile ? 16 : 0
+    const basePaintThrottleMs = isMobile ? 24 : 0
 
     custCanvas.addEventListener('pointermove', e => {
         if (painting) {
