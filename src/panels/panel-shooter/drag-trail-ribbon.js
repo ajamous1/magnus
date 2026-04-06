@@ -101,9 +101,14 @@ export function createDragTrailRibbon({
         trailGeometry.setDrawRange(0, Math.max(0, (count - 1)) * 6)
     }
 
+    function applyTheme(isLight) {
+        trailMaterial.color.set(isLight ? '#000000' : '#ffffff')
+    }
+
     return {
         trailMesh,
         updateTrailRibbon,
-        maxTrailPoints
+        maxTrailPoints,
+        applyTheme
     }
 }

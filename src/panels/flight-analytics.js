@@ -58,6 +58,7 @@ export function createFlightAnalyticsPanels(opts) {
         renderBirdseye: birdseye.renderBirdseye,
         resizeDataPanels,
         recordPhysicsSample,
-        drawFlightGraph: flightDynamics.drawFlightGraph
+        drawFlightGraph: flightDynamics.drawFlightGraph,
+        applyBirdseyeTheme: birdseye.applyTheme
     }
 }

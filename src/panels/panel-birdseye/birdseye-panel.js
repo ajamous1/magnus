@@ -114,11 +114,16 @@ export function createBirdseyePanel({
         birdseyeRenderer.setSize(w, h)
     }
 
+    function applyTheme(isLight) {
+        trailMaterial.color.set(isLight ? '#000000' : '#ffffff')
+    }
+
     return {
         clearTrail,
         pushTrailPoint,
         fadeTrail,
         renderBirdseye,
-        resizeBirdseye
+        resizeBirdseye,
+        applyTheme
     }
 }

@@ -134,7 +134,8 @@ const {
     fadeTrail,
     renderBirdseye,
     recordPhysicsSample,
-    drawFlightGraph
+    drawFlightGraph,
+    applyBirdseyeTheme
 } = createFlightAnalyticsPanels({
     scene,
     gridHelper,
@@ -169,7 +170,8 @@ const { kick, cancelKick } = createKickShot({
 const {
     trailMesh,
     updateTrailRibbon,
-    maxTrailPoints
+    maxTrailPoints,
+    applyTheme: applyTrailTheme
 } = createDragTrailRibbon({
     scene,
     camera,
@@ -395,6 +397,8 @@ function applyThemeToScenes() {
     if (customizer?.custScene) customizer.custScene.background.set(previewBg)
     applyPitchTheme(isLight)
     applyGoalTheme(isLight)
+    applyTrailTheme(isLight)
+    applyBirdseyeTheme(isLight)
     drawFlightGraph()
     renderBirdseye()
 }
